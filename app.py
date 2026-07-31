@@ -200,7 +200,7 @@ def get_theme_css():
 
 st.markdown(f"<style>{get_theme_css()}</style>", unsafe_allow_html=True)
 
-# Фон с шестиугольниками (без формул)
+# Фон с шестиугольниками
 st.markdown("""
 <div class="hex-bg">
     <div class="hex" style="top:5%; left:3%; transform:rotate(15deg);">⬡</div>
@@ -272,6 +272,8 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
         'n-butane': 'н-Бутан (C4)', 'i-butane': 'изо-Бутан (iC4)',
         'n-pentane': 'н-Пентан (C5)', 'i-pentane': 'изо-Пентан (iC5)',
         'c6plus': 'C6+ (всего)',
+        'benzene': 'Бензол (C₆H₆)',
+        'toluene': 'Толуол (C₇H₈)',
         'hexane': 'Гексан (C6)', 'heptane': 'Гептан (C7)',
         'octane': 'Октан (C8)', 'nonane': 'Нонан (C9)', 'decane': 'Декан (C10)'
     }
@@ -514,6 +516,8 @@ MW_MAP = {
     'methane': 16.043, 'ethane': 30.070, 'propane': 44.097,
     'n-butane': 58.123, 'i-butane': 58.123,
     'n-pentane': 72.151, 'i-pentane': 72.151,
+    'benzene': 78.114,
+    'toluene': 92.141,
     'hexane': 86.178, 'heptane': 100.205,
     'octane': 114.232, 'nonane': 128.259, 'decane': 142.286,
     'c6plus': 100.000
@@ -556,6 +560,8 @@ with col1:
             ('n-butane', 'н-Бутан C4'), ('i-butane', 'iC4'),
             ('n-pentane', 'н-Пентан C5'), ('i-pentane', 'iC5'),
             ('c6plus', 'C6+'),
+            ('benzene', 'Бензол C₆H₆'),
+            ('toluene', 'Толуол C₇H₈'),
             ('hexane', 'Гексан C6'), ('heptane', 'Гептан C7'),
             ('octane', 'Октан C8'), ('nonane', 'Нонан C9'), ('decane', 'Декан C10'),
         ]
@@ -567,6 +573,8 @@ with col1:
             'n-butane': 0.0, 'i-butane': 0.0,
             'n-pentane': 0.0, 'i-pentane': 0.0,
             'c6plus': 0.0,
+            'benzene': 0.0,
+            'toluene': 0.0,
             'hexane': 0.0, 'heptane': 0.0, 'octane': 0.0,
             'nonane': 0.0, 'decane': 0.0
         }
@@ -604,6 +612,8 @@ with col1:
                 'n-butane': 0.0, 'i-butane': 0.0,
                 'n-pentane': 0.0, 'i-pentane': 0.0,
                 'c6plus': 0.0,
+                'benzene': 0.0,
+                'toluene': 0.0,
                 'hexane': 0.0, 'heptane': 0.0, 'octane': 0.0,
                 'nonane': 0.0, 'decane': 0.0
             }
@@ -644,6 +654,8 @@ with col1:
             'methane': 'methane', 'ethane': 'ethane', 'propane': 'propane',
             'n-butane': 'n-butane', 'i-butane': 'i-butane',
             'n-pentane': 'n-pentane', 'i-pentane': 'i-pentane',
+            'benzene': 'benzene',
+            'toluene': 'toluene',
             'hexane': 'hexane', 'heptane': 'heptane',
             'octane': 'octane', 'nonane': 'nonane', 'decane': 'decane'
         }
@@ -707,7 +719,32 @@ with col1:
                 st.session_state.report_text = report_text
                 st.session_state.show_report = True
                 
-                st.info(f"Протокол сохранен")
+                st.success("Протокол сохранен локально")
+                
+                # ============================================================
+                # ЗАГРУЗКА НА ЯНДЕКС.ДИСК
+                # ============================================================
+                try:
+                    import yadisk
+                    
+                    YANDEX_TOKEN = "y0__wgBEKrwjKSq94ACGIG3CRiCpsle__GHtMKtlf-_hbbqnbs41qNvNeT2Lt"
+                    
+                    client = yadisk.Client(token=YANDEX_TOKEN)
+                    
+                    with client:
+                        remote_path = f"/Протоколы/protokol_{timestamp}_{st.session_state.user_sensor}.txt"
+                        
+                        # Создаем папку, если ее нет
+                        try:
+                            client.mkdir("/Протоколы", exist_ok=True)
+                        except:
+                            pass
+                        
+                        client.upload(filename, remote_path)
+                        st.info(f"📤 Протокол загружен на Яндекс.Диск: {remote_path}")
+                        
+                except Exception as e:
+                    st.warning(f"⚠️ Протокол не загружен на Диск: {str(e)}")
                 
             except Exception as e:
                 st.error(f"Ошибка: {str(e)}")
