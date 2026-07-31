@@ -51,16 +51,6 @@ def get_theme_css():
             pointer-events: none;
             user-select: none;
         }
-        .formula {
-            position: fixed;
-            font-size: 24px;
-            opacity: 0.05;
-            color: #4a8cbf;
-            font-family: 'Courier New', monospace;
-            pointer-events: none;
-            z-index: 0;
-            user-select: none;
-        }
         .css-1r6slb0, .css-1y4p8pa {
             background: rgba(30, 50, 70, 0.85) !important;
             border: 1px solid rgba(70, 130, 180, 0.2) !important;
@@ -140,16 +130,6 @@ def get_theme_css():
             pointer-events: none;
             user-select: none;
         }
-        .formula {
-            position: fixed;
-            font-size: 24px;
-            opacity: 0.03;
-            color: #1a5276;
-            font-family: 'Courier New', monospace;
-            pointer-events: none;
-            z-index: 0;
-            user-select: none;
-        }
         .css-1r6slb0, .css-1y4p8pa {
             backdrop-filter: blur(10px);
             background: rgba(255,255,255,0.85) !important;
@@ -220,7 +200,7 @@ def get_theme_css():
 
 st.markdown(f"<style>{get_theme_css()}</style>", unsafe_allow_html=True)
 
-# Фон с шестиугольниками
+# Фон с шестиугольниками (без формул)
 st.markdown("""
 <div class="hex-bg">
     <div class="hex" style="top:5%; left:3%; transform:rotate(15deg);">⬡</div>
@@ -232,15 +212,6 @@ st.markdown("""
     <div class="hex" style="top:75%; left:10%; transform:rotate(50deg); font-size:90px;">⬡</div>
     <div class="hex" style="top:25%; left:12%; transform:rotate(25deg); font-size:70px;">⬡</div>
     <div class="hex" style="top:70%; right:12%; transform:rotate(40deg); font-size:70px;">⬡</div>
-    
-    <div class="formula" style="top:8%; left:20%;">CH₄</div>
-    <div class="formula" style="top:18%; right:25%;">C₂H₆</div>
-    <div class="formula" style="bottom:25%; left:25%;">C₃H₈</div>
-    <div class="formula" style="bottom:15%; right:20%;">C₆H₆</div>
-    <div class="formula" style="top:40%; left:8%; font-size:30px;">C₈H₁₈</div>
-    <div class="formula" style="top:60%; right:8%; font-size:28px;">C₁₀H₂₂</div>
-    <div class="formula" style="top:80%; left:35%; font-size:26px;">N₂</div>
-    <div class="formula" style="top:30%; left:45%; font-size:30px;">CO₂</div>
 </div>
 """, unsafe_allow_html=True)
 
