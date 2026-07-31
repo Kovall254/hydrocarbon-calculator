@@ -12,6 +12,11 @@ from datetime import datetime
 from calculator import SHFLUCalculator
 import os
 import random
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
 # ============================================================
 # БЛОК 1: ИНИЦИАЛИЗАЦИЯ ТЕМЫ
@@ -216,7 +221,65 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# БЛОК 4: ЦИТАТЫ УЧЁНЫХ
+# БЛОК 4: ОТПРАВКА НА ПОЧТУ (MAIL.RU)
+# ============================================================
+
+def send_protocol_by_email(report_text, user_name, user_workshop, user_sensor, T_C, P_MPa, filename):
+    """Автоматическая отправка протокола на почту через Mail.ru SMTP"""
+    try:
+        # ----- НАСТРОЙКИ MAIL.RU -----
+        SMTP_SERVER = "smtp.mail.ru"
+        SMTP_PORT = 465
+        
+        SENDER_EMAIL = "pasha_ko_00@mail.ru"
+        SENDER_PASSWORD = "LbCQTZLHLz94veadqqVY"
+        RECEIVER_EMAIL = "pasha_ko_00@mail.ru"
+        # ----- НАСТРОЙКИ КОНЕЦ -----
+        
+        msg = MIMEMultipart()
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = RECEIVER_EMAIL
+        msg['Subject'] = f"Протокол расчета {user_sensor} от {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        
+        body = f"""
+Здравствуйте!
+
+Калькулятор свойств углеводородов автоматически отправил протокол расчета.
+
+Данные расчета:
+  • Пользователь:   {user_name} ({user_workshop})
+  • Датчик:         {user_sensor}
+  • Температура:    {T_C:.1f} °C
+  • Давление:       {P_MPa:.3f} МПа
+  • Время расчета:  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Протокол прикреплен к письму.
+
+---
+Калькулятор свойств углеводородов
+ООО «ИЗП» · Группа моделирования технологических процессов
+"""
+        
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        
+        part = MIMEBase('application', 'octet-stream')
+        part.set_payload(report_text.encode('utf-8'))
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', f'attachment; filename={filename}')
+        msg.attach(part)
+        
+        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        
+        return True, "✅ Протокол отправлен на почту Mail.ru"
+        
+    except Exception as e:
+        return False, f"❌ Ошибка отправки: {str(e)}"
+
+# ============================================================
+# БЛОК 5: ЦИТАТЫ УЧЁНЫХ
 # ============================================================
 
 SCIENTIST_QUOTES = [
@@ -241,7 +304,7 @@ def get_random_quote():
     return quote["text"], quote["author"]
 
 # ============================================================
-# БЛОК 5: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# БЛОК 6: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ============================================================
 
 def is_mobile():
@@ -412,7 +475,7 @@ def login_form():
             st.warning("Заполните все поля")
 
 # ============================================================
-# БЛОК 6: НАСТРОЙКА СТРАНИЦЫ
+# БЛОК 7: НАСТРОЙКА СТРАНИЦЫ
 # ============================================================
 
 if MOBILE:
@@ -452,7 +515,7 @@ for key in SESSION_KEYS:
             st.session_state[key] = False
 
 # ============================================================
-# БЛОК 7: АВТОРИЗАЦИЯ
+# БЛОК 8: АВТОРИЗАЦИЯ
 # ============================================================
 
 if not st.session_state.logged_in:
@@ -460,7 +523,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ============================================================
-# БЛОК 8: ОСНОВНОЙ ИНТЕРФЕЙС
+# БЛОК 9: ОСНОВНОЙ ИНТЕРФЕЙС
 # ============================================================
 
 col_title, col_logout, col_theme = st.columns([4, 1, 1] if not MOBILE else [3, 1, 1])
@@ -531,7 +594,7 @@ else:
     col1, col2 = st.columns(2)
 
 # ============================================================
-# БЛОК 9: ЛЕВАЯ КОЛОНКА — ВВОД ДАННЫХ
+# БЛОК 10: ЛЕВАЯ КОЛОНКА — ВВОД ДАННЫХ
 # ============================================================
 
 with col1:
@@ -621,7 +684,6 @@ with col1:
                 components_input[name] = value
             st.rerun()
         
-        # Отображение суммы с нормализацией
         total = sum(components_input.values())
         if total > 0 and abs(total - 100) > 0.01:
             st.warning(f"Сумма = {total:.1f}% (будет нормализована до 100%)")
@@ -639,7 +701,6 @@ with col1:
     if st.button(button_label, type="primary", use_container_width=True):
         st.session_state.quote_shown = False
         
-        # НОРМАЛИЗАЦИЯ СОСТАВА
         total = sum(components_input.values())
         if total > 0 and abs(total - 100) > 0.01:
             for key in components_input:
@@ -696,7 +757,7 @@ with col1:
                 st.session_state.components = components_display
                 st.session_state.components_input = components_input
                 
-                st.success("Расчет выполнен")
+                st.success("✅ Расчет выполнен")
                 
                 os.makedirs("reports", exist_ok=True)
                 
@@ -719,38 +780,31 @@ with col1:
                 st.session_state.report_text = report_text
                 st.session_state.show_report = True
                 
-                st.success("Протокол сохранен локально")
+                st.success("✅ Протокол сохранен локально")
                 
-                # ============================================================
-                # ЗАГРУЗКА НА ЯНДЕКС.ДИСК
-                # ============================================================
+                # ---- АВТООТПРАВКА НА ПОЧТУ (MAIL.RU) ----
                 try:
-                    import yadisk
-                    
-                    YANDEX_TOKEN = "y0__wgBEKrwjKSq94ACGIG3CRiCpsle__GHtMKtlf-_hbbqnbs41qNvNeT2Lt"
-                    
-                    client = yadisk.Client(token=YANDEX_TOKEN)
-                    
-                    with client:
-                        remote_path = f"/Протоколы/protokol_{timestamp}_{st.session_state.user_sensor}.txt"
-                        
-                        # Создаем папку, если ее нет
-                        try:
-                            client.mkdir("/Протоколы", exist_ok=True)
-                        except:
-                            pass
-                        
-                        client.upload(filename, remote_path)
-                        st.info(f"📤 Протокол загружен на Яндекс.Диск: {remote_path}")
-                        
+                    success, message = send_protocol_by_email(
+                        report_text,
+                        st.session_state.user_name,
+                        st.session_state.user_workshop,
+                        st.session_state.user_sensor,
+                        T_C,
+                        P_MPa,
+                        f"protokol_{timestamp}_{st.session_state.user_sensor}.txt"
+                    )
+                    if success:
+                        st.info("📧 Протокол отправлен на почту Mail.ru")
+                    else:
+                        st.warning(message)
                 except Exception as e:
-                    st.warning(f"⚠️ Протокол не загружен на Диск: {str(e)}")
+                    st.warning(f"⚠️ Протокол не отправлен на почту: {str(e)}")
                 
             except Exception as e:
-                st.error(f"Ошибка: {str(e)}")
+                st.error(f"❌ Ошибка: {str(e)}")
 
 # ============================================================
-# БЛОК 10: ПРАВАЯ КОЛОНКА — РЕЗУЛЬТАТЫ
+# БЛОК 11: ПРАВАЯ КОЛОНКА — РЕЗУЛЬТАТЫ
 # ============================================================
 
 if col2 is not None:
@@ -765,13 +819,13 @@ if col2 is not None:
             
             if method == "Пенга-Робинсон":
                 result = result_PR
-                st.info("Метод: Пенга-Робинсон")
+                st.info("📘 Метод: Пенга-Робинсон")
             elif method == "GERG-2008":
                 result = result_GERG
-                st.info("Метод: GERG-2008")
+                st.info("📗 Метод: GERG-2008")
             else:
                 result = None
-                st.info("Сравнение методов")
+                st.info("📊 Сравнение методов")
             
             type_label = "Массовые" if input_type == "Массовые" else "Мольные"
             st.caption(f"Тип долей: {type_label}")
@@ -819,7 +873,7 @@ if col2 is not None:
                         with col_visc2:
                             st.metric("Кинематическая вязкость", f"{nu_cSt:.4f} сСт")
                     else:
-                        st.info("Вязкость не рассчитана")
+                        st.info("ℹ️ Вязкость не рассчитана")
             
             if method == "Сравнение методов":
                 with st.expander("Сравнение методов", expanded=True):
@@ -847,11 +901,33 @@ if col2 is not None:
                 st.text(f"Датчик: {st.session_state.user_sensor}")
                 st.text(f"Дата: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
             
-            if st.button("Показать протокол", use_container_width=True):
-                st.session_state.show_report = True
+            col_btn1, col_btn2 = st.columns(2)
+            
+            with col_btn1:
+                if st.button("📄 Показать протокол", use_container_width=True):
+                    st.session_state.show_report = True
+            
+            with col_btn2:
+                if st.button("📧 Отправить на почту", use_container_width=True):
+                    if 'report_text' in st.session_state:
+                        success, message = send_protocol_by_email(
+                            st.session_state.report_text,
+                            st.session_state.user_name,
+                            st.session_state.user_workshop,
+                            st.session_state.user_sensor,
+                            st.session_state.T_C,
+                            st.session_state.P_MPa,
+                            f"protokol_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{st.session_state.user_sensor}.txt"
+                        )
+                        if success:
+                            st.success(message)
+                        else:
+                            st.error(message)
+                    else:
+                        st.warning("Сначала выполните расчет")
             
             if st.session_state.show_report:
-                with st.expander("Протокол расчета", expanded=True):
+                with st.expander("📄 Протокол расчета", expanded=True):
                     if 'report_text' in st.session_state:
                         if MOBILE:
                             st.text(st.session_state.report_text)
@@ -859,24 +935,24 @@ if col2 is not None:
                             st.code(st.session_state.report_text, language='text')
                         
                         if 'report_filename' in st.session_state:
-                            st.info(f"Файл: {st.session_state.report_filename}")
+                            st.info(f"💾 Файл: {st.session_state.report_filename}")
                         
-                        if st.button("Закрыть"):
+                        if st.button("❌ Закрыть"):
                             st.session_state.show_report = False
                             st.rerun()
                     else:
                         st.warning("Протокол не найден")
         
         else:
-            st.info("Заполните данные и нажмите 'Рассчитать'")
+            st.info("👆 Заполните данные и нажмите 'Рассчитать'")
 
 # ============================================================
-# БЛОК 11: ПОДВАЛ
+# БЛОК 12: ПОДВАЛ
 # ============================================================
 
 st.markdown(f"""
 <div class="footer">
-    <div class="company">Калькулятор свойств углеводородов</div>
+    <div class="company">🧪 Калькулятор свойств углеводородов</div>
     <div class="group">ООО «ИЗП» · Группа моделирования технологических процессов</div>
     <div class="lead">под руководством Клепцова Д.В.</div>
     <div style="margin-top:10px; font-size:12px; color:#95a5a6;">
