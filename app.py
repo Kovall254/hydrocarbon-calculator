@@ -14,98 +14,238 @@ import os
 import random
 
 # ============================================================
-# БЛОК 1: CSS-СТИЛИ ДЛЯ ИНТЕРФЕЙСА
+# БЛОК 1: ИНИЦИАЛИЗАЦИЯ ТЕМЫ
 # ============================================================
 
+if 'theme' not in st.session_state:
+    st.session_state.theme = 'light'
+
+# ============================================================
+# БЛОК 2: ФУНКЦИЯ ВОЗВРАТА CSS В ЗАВИСИМОСТИ ОТ ТЕМЫ
+# ============================================================
+
+def get_theme_css():
+    if st.session_state.theme == 'dark':
+        return """
+        .stApp {
+            background: linear-gradient(135deg, #0d1b2a 0%, #1b2d45 100%);
+            color: #e8f0fe;
+        }
+        .hex-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+        .hex {
+            position: absolute;
+            font-size: 80px;
+            opacity: 0.06;
+            color: #4a8cbf;
+            font-weight: bold;
+            transform: rotate(30deg);
+            pointer-events: none;
+            user-select: none;
+        }
+        .formula {
+            position: fixed;
+            font-size: 24px;
+            opacity: 0.05;
+            color: #4a8cbf;
+            font-family: 'Courier New', monospace;
+            pointer-events: none;
+            z-index: 0;
+            user-select: none;
+        }
+        .css-1r6slb0, .css-1y4p8pa {
+            background: rgba(30, 50, 70, 0.85) !important;
+            border: 1px solid rgba(70, 130, 180, 0.2) !important;
+            color: #e8f0fe !important;
+        }
+        .stMarkdown, .stText, .stCaption, .stMetric {
+            color: #e8f0fe !important;
+        }
+        h1, h2, h3, h4, h5, h6, .stHeading {
+            color: #e8f0fe !important;
+        }
+        .quote {
+            color: #e8f0fe;
+            border-left-color: #4a8cbf;
+            background: rgba(70, 130, 180, 0.1);
+        }
+        .quote-author {
+            color: #8bb8d9;
+        }
+        .footer {
+            color: #8bb8d9;
+            border-top-color: rgba(70, 130, 180, 0.2);
+        }
+        .footer .company, .footer .group, .footer .lead {
+            color: #e8f0fe;
+        }
+        .stButton > button {
+            background: #1b3a5c !important;
+            color: #e8f0fe !important;
+        }
+        .stButton > button:hover {
+            background: #2a5a7a !important;
+        }
+        .stTextInput > div > input {
+            background: #1b2d45 !important;
+            color: #e8f0fe !important;
+        }
+        .stNumberInput > div > input {
+            background: #1b2d45 !important;
+            color: #e8f0fe !important;
+        }
+        .stSelectbox > div > div {
+            background: #1b2d45 !important;
+            color: #e8f0fe !important;
+        }
+        .sci-fi-title {
+            background: linear-gradient(135deg, #4a8cbf, #7ab8e0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 900;
+            text-shadow: 0 0 30px rgba(74, 140, 191, 0.3);
+        }
+        """
+    else:
+        return """
+        .stApp {
+            background: linear-gradient(135deg, #f5f8fc 0%, #e8f0f8 100%);
+            color: #0e1a2b;
+        }
+        .hex-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+        .hex {
+            position: absolute;
+            font-size: 80px;
+            opacity: 0.04;
+            color: #1a5276;
+            font-weight: bold;
+            transform: rotate(30deg);
+            pointer-events: none;
+            user-select: none;
+        }
+        .formula {
+            position: fixed;
+            font-size: 24px;
+            opacity: 0.03;
+            color: #1a5276;
+            font-family: 'Courier New', monospace;
+            pointer-events: none;
+            z-index: 0;
+            user-select: none;
+        }
+        .css-1r6slb0, .css-1y4p8pa {
+            backdrop-filter: blur(10px);
+            background: rgba(255,255,255,0.85) !important;
+            border: 1px solid rgba(46,134,193,0.15) !important;
+        }
+        .quote {
+            font-style: italic;
+            color: #1a5276;
+            text-align: center;
+            padding: 12px 20px;
+            border-left: 4px solid #2e86c1;
+            background: rgba(46,134,193,0.05);
+            border-radius: 8px;
+            margin: 20px 0;
+            font-size: 15px;
+        }
+        .quote-author {
+            font-style: normal;
+            font-weight: 600;
+            color: #1a5276;
+            display: block;
+            margin-top: 5px;
+            font-size: 13px;
+        }
+        .footer {
+            text-align: center;
+            color: #5d6d7e;
+            font-size: 13px;
+            padding: 20px 0 10px 0;
+            border-top: 1px solid rgba(46,134,193,0.15);
+            margin-top: 30px;
+            line-height: 1.8;
+        }
+        .footer .company {
+            font-size: 15px;
+            font-weight: 700;
+            color: #1a5276;
+            letter-spacing: 0.5px;
+        }
+        .footer .group {
+            font-size: 14px;
+            color: #2c3e50;
+        }
+        .footer .lead {
+            font-size: 14px;
+            color: #2c3e50;
+        }
+        .sci-fi-title {
+            background: linear-gradient(135deg, #1a5276, #2e86c1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 900;
+            text-shadow: 0 0 30px rgba(46,134,193,0.3);
+        }
+        .stButton > button {
+            transition: all 0.3s ease !important;
+            border-radius: 12px !important;
+        }
+        .stButton > button:hover {
+            transform: scale(1.03);
+            box-shadow: 0 0 30px rgba(46,134,193,0.4) !important;
+        }
+        """
+
+# ============================================================
+# БЛОК 3: ПРИМЕНЕНИЕ CSS И ФОНА
+# ============================================================
+
+st.markdown(f"<style>{get_theme_css()}</style>", unsafe_allow_html=True)
+
+# Фон с шестиугольниками
 st.markdown("""
-<style>
-.stApp {
-    background: linear-gradient(135deg, #f5f8fc 0%, #e8f0f8 100%);
-    color: #0e1a2b;
-}
-
-@media (max-width: 768px) {
-    .stApp { padding: 5px !important; }
-    .stButton > button { font-size: 14px !important; padding: 10px !important; }
-    .css-1r6slb0, .css-1y4p8pa { padding: 10px !important; }
-}
-
-.sci-fi-title {
-    background: linear-gradient(135deg, #1a5276, #2e86c1);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    font-weight: 900;
-    text-shadow: 0 0 30px rgba(46,134,193,0.3);
-}
-
-.stButton > button {
-    transition: all 0.3s ease !important;
-    border-radius: 12px !important;
-}
-
-.stButton > button:hover {
-    transform: scale(1.03);
-    box-shadow: 0 0 30px rgba(46,134,193,0.4) !important;
-}
-
-.css-1r6slb0, .css-1y4p8pa {
-    backdrop-filter: blur(10px);
-    background: rgba(255,255,255,0.85) !important;
-    border: 1px solid rgba(46,134,193,0.15) !important;
-}
-
-.quote {
-    font-style: italic;
-    color: #1a5276;
-    text-align: center;
-    padding: 12px 20px;
-    border-left: 4px solid #2e86c1;
-    background: rgba(46,134,193,0.05);
-    border-radius: 8px;
-    margin: 20px 0;
-    font-size: 15px;
-}
-
-.quote-author {
-    font-style: normal;
-    font-weight: 600;
-    color: #1a5276;
-    display: block;
-    margin-top: 5px;
-    font-size: 13px;
-}
-
-.footer {
-    text-align: center;
-    color: #5d6d7e;
-    font-size: 13px;
-    padding: 20px 0 10px 0;
-    border-top: 1px solid rgba(46,134,193,0.15);
-    margin-top: 30px;
-    line-height: 1.8;
-}
-
-.footer .company {
-    font-size: 15px;
-    font-weight: 700;
-    color: #1a5276;
-    letter-spacing: 0.5px;
-}
-
-.footer .group {
-    font-size: 14px;
-    color: #2c3e50;
-}
-
-.footer .lead {
-    font-size: 14px;
-    color: #2c3e50;
-}
-</style>
+<div class="hex-bg">
+    <div class="hex" style="top:5%; left:3%; transform:rotate(15deg);">⬡</div>
+    <div class="hex" style="top:15%; right:8%; transform:rotate(45deg);">⬡</div>
+    <div class="hex" style="bottom:20%; left:5%; transform:rotate(60deg);">⬡</div>
+    <div class="hex" style="bottom:10%; right:3%; transform:rotate(20deg);">⬡</div>
+    <div class="hex" style="top:45%; left:2%; transform:rotate(35deg); font-size:100px;">⬡</div>
+    <div class="hex" style="top:55%; right:2%; transform:rotate(10deg); font-size:100px;">⬡</div>
+    <div class="hex" style="top:75%; left:10%; transform:rotate(50deg); font-size:90px;">⬡</div>
+    <div class="hex" style="top:25%; left:12%; transform:rotate(25deg); font-size:70px;">⬡</div>
+    <div class="hex" style="top:70%; right:12%; transform:rotate(40deg); font-size:70px;">⬡</div>
+    
+    <div class="formula" style="top:8%; left:20%;">CH₄</div>
+    <div class="formula" style="top:18%; right:25%;">C₂H₆</div>
+    <div class="formula" style="bottom:25%; left:25%;">C₃H₈</div>
+    <div class="formula" style="bottom:15%; right:20%;">C₆H₆</div>
+    <div class="formula" style="top:40%; left:8%; font-size:30px;">C₈H₁₈</div>
+    <div class="formula" style="top:60%; right:8%; font-size:28px;">C₁₀H₂₂</div>
+    <div class="formula" style="top:80%; left:35%; font-size:26px;">N₂</div>
+    <div class="formula" style="top:30%; left:45%; font-size:30px;">CO₂</div>
+</div>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# БЛОК 2: ЦИТАТЫ УЧЁНЫХ
+# БЛОК 4: ЦИТАТЫ УЧЁНЫХ
 # ============================================================
 
 SCIENTIST_QUOTES = [
@@ -130,7 +270,7 @@ def get_random_quote():
     return quote["text"], quote["author"]
 
 # ============================================================
-# БЛОК 3: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# БЛОК 5: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ============================================================
 
 def is_mobile():
@@ -299,7 +439,7 @@ def login_form():
             st.warning("Заполните все поля")
 
 # ============================================================
-# БЛОК 4: НАСТРОЙКА СТРАНИЦЫ
+# БЛОК 6: НАСТРОЙКА СТРАНИЦЫ
 # ============================================================
 
 if MOBILE:
@@ -339,7 +479,7 @@ for key in SESSION_KEYS:
             st.session_state[key] = False
 
 # ============================================================
-# БЛОК 5: АВТОРИЗАЦИЯ
+# БЛОК 7: АВТОРИЗАЦИЯ
 # ============================================================
 
 if not st.session_state.logged_in:
@@ -347,10 +487,10 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ============================================================
-# БЛОК 6: ОСНОВНОЙ ИНТЕРФЕЙС
+# БЛОК 8: ОСНОВНОЙ ИНТЕРФЕЙС
 # ============================================================
 
-col_title, col_logout = st.columns([4, 1] if not MOBILE else [3, 1])
+col_title, col_logout, col_theme = st.columns([4, 1, 1] if not MOBILE else [3, 1, 1])
 
 with col_title:
     if MOBILE:
@@ -367,6 +507,14 @@ with col_logout:
         st.session_state.logged_in = False
         st.session_state.user_name = ''
         st.session_state.user_workshop = ''
+        st.rerun()
+
+with col_theme:
+    st.write("")
+    st.write("")
+    theme_icon = "🌙" if st.session_state.theme == 'light' else "☀️"
+    if st.button(theme_icon, use_container_width=True, help="Переключить тему"):
+        st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
         st.rerun()
 
 st.caption(f"Пользователь: {st.session_state.user_name} | {st.session_state.user_workshop}")
@@ -402,13 +550,13 @@ MW_MAP = {
 
 # Разделение на колонки
 if MOBILE:
-    col1, col2 = st.columns([1])[0]
+    col1 = st.columns(1)[0]
     col2 = None
 else:
     col1, col2 = st.columns(2)
 
 # ============================================================
-# БЛОК 7: ЛЕВАЯ КОЛОНКА — ВВОД ДАННЫХ
+# БЛОК 9: ЛЕВАЯ КОЛОНКА — ВВОД ДАННЫХ
 # ============================================================
 
 with col1:
@@ -510,7 +658,7 @@ with col1:
     if st.button(button_label, type="primary", use_container_width=True):
         st.session_state.quote_shown = False
         
-        # ---- НОРМАЛИЗАЦИЯ СОСТАВА ----
+        # НОРМАЛИЗАЦИЯ СОСТАВА
         total = sum(components_input.values())
         if total > 0 and abs(total - 100) > 0.01:
             for key in components_input:
@@ -528,9 +676,6 @@ with col1:
             'hexane': 'hexane', 'heptane': 'heptane',
             'octane': 'octane', 'nonane': 'nonane', 'decane': 'decane'
         }
-        
-        # ---- УСЛОВИЕ: ЕСЛИ C6+ = 0, ПРОПУСКАЕМ РАЗБИВКУ ----
-        # ключ 'c6plus' не добавляется в расчет, он только для отображения
         
         if input_type == "Массовые":
             components_for_calc = mass_to_mole(components_input, MW_MAP)
@@ -597,7 +742,7 @@ with col1:
                 st.error(f"Ошибка: {str(e)}")
 
 # ============================================================
-# БЛОК 8: ПРАВАЯ КОЛОНКА — РЕЗУЛЬТАТЫ
+# БЛОК 10: ПРАВАЯ КОЛОНКА — РЕЗУЛЬТАТЫ
 # ============================================================
 
 if col2 is not None:
@@ -718,7 +863,7 @@ if col2 is not None:
             st.info("Заполните данные и нажмите 'Рассчитать'")
 
 # ============================================================
-# БЛОК 9: ПОДВАЛ
+# БЛОК 11: ПОДВАЛ
 # ============================================================
 
 st.markdown(f"""
