@@ -4,3 +4,4 @@ matplotlib>=3.5.0
 thermo>=0.2.0
 CoolProp>=6.4.0
 openpyxl>=3.0.0
+yadisk>=1.0.0   
