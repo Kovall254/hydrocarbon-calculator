@@ -1,0 +1,732 @@
+# ============================================================
+# МОДУЛЬ: app.py
+# НАЗНАЧЕНИЕ: веб-интерфейс для расчета свойств углеводородов
+# ТЕХНОЛОГИИ: Streamlit, Pandas, Matplotlib
+# АВТОР: Группа моделирования технологических процессов, ООО "ИЗП"
+# ============================================================
+
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+from datetime import datetime
+from calculator import SHFLUCalculator
+import os
+import random
+
+# ============================================================
+# БЛОК 1: CSS-СТИЛИ ДЛЯ ИНТЕРФЕЙСА
+# ============================================================
+
+st.markdown("""
+<style>
+.stApp {
+    background: linear-gradient(135deg, #f5f8fc 0%, #e8f0f8 100%);
+    color: #0e1a2b;
+}
+
+@media (max-width: 768px) {
+    .stApp { padding: 5px !important; }
+    .stButton > button { font-size: 14px !important; padding: 10px !important; }
+    .css-1r6slb0, .css-1y4p8pa { padding: 10px !important; }
+}
+
+.sci-fi-title {
+    background: linear-gradient(135deg, #1a5276, #2e86c1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 900;
+    text-shadow: 0 0 30px rgba(46,134,193,0.3);
+}
+
+.stButton > button {
+    transition: all 0.3s ease !important;
+    border-radius: 12px !important;
+}
+
+.stButton > button:hover {
+    transform: scale(1.03);
+    box-shadow: 0 0 30px rgba(46,134,193,0.4) !important;
+}
+
+.css-1r6slb0, .css-1y4p8pa {
+    backdrop-filter: blur(10px);
+    background: rgba(255,255,255,0.85) !important;
+    border: 1px solid rgba(46,134,193,0.15) !important;
+}
+
+.quote {
+    font-style: italic;
+    color: #1a5276;
+    text-align: center;
+    padding: 12px 20px;
+    border-left: 4px solid #2e86c1;
+    background: rgba(46,134,193,0.05);
+    border-radius: 8px;
+    margin: 20px 0;
+    font-size: 15px;
+}
+
+.quote-author {
+    font-style: normal;
+    font-weight: 600;
+    color: #1a5276;
+    display: block;
+    margin-top: 5px;
+    font-size: 13px;
+}
+
+.footer {
+    text-align: center;
+    color: #5d6d7e;
+    font-size: 13px;
+    padding: 20px 0 10px 0;
+    border-top: 1px solid rgba(46,134,193,0.15);
+    margin-top: 30px;
+    line-height: 1.8;
+}
+
+.footer .company {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1a5276;
+    letter-spacing: 0.5px;
+}
+
+.footer .group {
+    font-size: 14px;
+    color: #2c3e50;
+}
+
+.footer .lead {
+    font-size: 14px;
+    color: #2c3e50;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ============================================================
+# БЛОК 2: ЦИТАТЫ УЧЁНЫХ
+# ============================================================
+
+SCIENTIST_QUOTES = [
+    {"text": "В науке нет ничего такого, что нельзя было бы понять. Важно лишь терпение и желание.", "author": "Дмитрий Менделеев"},
+    {"text": "Многие из тех, кто не боялись рисковать, погибли, но те, кто выжили, изменили мир.", "author": "Никола Тесла"},
+    {"text": "Познание начинается с удивления.", "author": "Аристотель"},
+    {"text": "Химия — это физика, только более красивая и сложная.", "author": "Мари Кюри"},
+    {"text": "Великие открытия делаются теми, кто умеет удивляться тому, что все считают очевидным.", "author": "Альберт Эйнштейн"},
+    {"text": "Химия — это наука о веществах и их превращениях. А превращения — это жизнь.", "author": "Александр Бутлеров"},
+    {"text": "В химии нет ничего сложного, есть только неизвестное.", "author": "Антуан Лавуазье"},
+    {"text": "Я никогда не считал, что могу сделать что-то выдающееся. Я просто работал и верил.", "author": "Мари Кюри"},
+    {"text": "Наука не является и не будет являться законченной книгой. Каждый важный успех приносит новые вопросы.", "author": "Альберт Эйнштейн"},
+    {"text": "Химия — это мост между физикой и биологией.", "author": "Лайнус Полинг"},
+    {"text": "Все вещества — это яды. Всё зависит от дозы.", "author": "Парацельс"},
+    {"text": "Мысль о том, что мы можем управлять материей, — это и есть химия.", "author": "Роберт Вудворд"},
+    {"text": "Прогресс науки зависит не от количества идей, а от количества проверенных идей.", "author": "Пётр Капица"},
+    {"text": "Истина — это то, что выдерживает проверку временем и экспериментом.", "author": "Дмитрий Менделеев"}
+]
+
+def get_random_quote():
+    quote = random.choice(SCIENTIST_QUOTES)
+    return quote["text"], quote["author"]
+
+# ============================================================
+# БЛОК 3: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# ============================================================
+
+def is_mobile():
+    try:
+        ua = st.context.headers.get('User-Agent', '').lower()
+        return any(x in ua for x in ['mobile', 'android', 'iphone', 'ipad'])
+    except:
+        return False
+
+MOBILE = is_mobile()
+
+def normalize_composition(components):
+    """Нормализация состава до 100%"""
+    total = sum(components.values())
+    if total > 0 and abs(total - 100) > 0.01:
+        for key in components:
+            components[key] = (components[key] / total) * 100
+    return components
+
+def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
+                   user_name, user_workshop, user_sensor, input_type, components_mass):
+    """Формирует текстовый протокол"""
+    
+    display_names = {
+        'helium': 'Гелий', 'hydrogen': 'Водород', 'oxygen': 'Кислород',
+        'nitrogen': 'Азот', 'co2': 'CO₂',
+        'methane': 'Метан (C1)', 'ethane': 'Этан (C2)', 'propane': 'Пропан (C3)',
+        'n-butane': 'н-Бутан (C4)', 'i-butane': 'изо-Бутан (iC4)',
+        'n-pentane': 'н-Пентан (C5)', 'i-pentane': 'изо-Пентан (iC5)',
+        'c6plus': 'C6+ (всего)',
+        'hexane': 'Гексан (C6)', 'heptane': 'Гептан (C7)',
+        'octane': 'Октан (C8)', 'nonane': 'Нонан (C9)', 'decane': 'Декан (C10)'
+    }
+    
+    comp_str = ""
+    for key, value in components.items():
+        if value > 0:
+            display = display_names.get(key, key)
+            comp_str += f"    {display:<20} {value:>6.1f} %\n"
+    
+    mu_PR = result_PR.get('mu_dynamic')
+    mu_GERG = result_GERG.get('mu_dynamic')
+    
+    mu_PR_str = f"{mu_PR*1000:.4f}" if mu_PR is not None else "—"
+    mu_GERG_str = f"{mu_GERG*1000:.4f}" if mu_GERG is not None else "—"
+    
+    rho_PR = result_PR.get('rho_gas') or result_PR.get('rho') or 1.0
+    rho_GERG = result_GERG.get('rho') or 1.0
+    
+    nu_PR_str = f"{(mu_PR/rho_PR)*1e6:.4f}" if mu_PR is not None else "—"
+    nu_GERG_str = f"{(mu_GERG/rho_GERG)*1e6:.4f}" if mu_GERG is not None else "—"
+    
+    rho_PR_str = f"{result_PR['rho_gas']:.3f}" if result_PR.get('rho_gas') else f"{result_PR['rho']:.3f}"
+    rho_GERG_str = f"{result_GERG['rho']:.3f}"
+    
+    diff = abs(result_PR['Z'] - result_GERG['Z']) / result_GERG['Z'] * 100
+    type_label = "Массовые" if input_type == "Массовые" else "Мольные"
+    
+    quote_text, quote_author = get_random_quote()
+    
+    return f"""
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    КАЛЬКУЛЯТОР СВОЙСТВ УГЛЕВОДОРОДОВ                      ║
+║                          ПРОТОКОЛ РАСЧЕТА                                  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ДАННЫЕ ПОЛЬЗОВАТЕЛЯ                                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Фамилия И.О.:     {user_name:<40} │
+│  Цех:              {user_workshop:<40} │
+│  Датчик:           {user_sensor:<40} │
+│  Дата расчета:     {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}                    │
+│  Тип долей:        {type_label:<44}                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ВХОДНЫЕ ДАННЫЕ                                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Температура:        {T_C:>7.1f} °C                                    │
+│  Давление:           {P_MPa:>7.3f} МПа                                 │
+│  Метод:              {method:<44}                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ СОСТАВ СМЕСИ ({type_label} доли)                                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+{comp_str}└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ РЕЗУЛЬТАТЫ РАСЧЕТА                                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  {T_C:.1f}°C, {P_MPa:.3f} МПа                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Параметр                 │  Пенга-Робинсон    │  GERG-2008               │
+├───────────────────────────┼────────────────────┼──────────────────────────┤
+│  Z-фактор                 │  {result_PR['Z']:.6f}     │  {result_GERG['Z']:.6f}            │
+│  Плотность, кг/м³         │  {rho_PR_str:>9}        │  {rho_GERG_str:>9}          │
+│  Дин. вязкость, сП        │  {mu_PR_str:>9}        │  {mu_GERG_str:>9}          │
+│  Кин. вязкость, сСт       │  {nu_PR_str:>9}        │  {nu_GERG_str:>9}          │
+│  Мол. масса, кг/кмоль     │  {result_PR['MW']:.3f}     │  {result_GERG['MW']:.3f}            │
+└───────────────────────────┴────────────────────┴──────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ СРАВНЕНИЕ МЕТОДОВ                                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Разница Z-фактора:      {diff:.3f} %                                           │
+│  Рекомендация:           {'Z-факторы близки, методы согласуются' if diff < 2 else 'Рекомендуется использовать GERG-2008 для повышенной точности'} │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  ЦИТАТА УЧЁНОГО                                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  «{quote_text}»                                                           │
+│  — {quote_author}                                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  Расчет произведен автоматически.                                          ║
+║  Ответственность за корректность исходных данных несет пользователь.       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+"""
+
+def mass_to_mole(components_mass, components_mw):
+    """Пересчет массовых долей в мольные"""
+    mass_values = {}
+    total_mass = 0
+    
+    for key, value in components_mass.items():
+        if value > 0:
+            mass_values[key] = value
+            total_mass += value
+    
+    mole_values = {}
+    total_moles = 0
+    
+    for key, mass in mass_values.items():
+        if key in components_mw and components_mw[key] > 0:
+            moles = mass / components_mw[key]
+            mole_values[key] = moles
+            total_moles += moles
+    
+    mole_fractions = {}
+    for key, moles in mole_values.items():
+        if total_moles > 0:
+            mole_fractions[key] = (moles / total_moles) * 100
+    
+    return mole_fractions
+
+def login_form():
+    """Форма входа для авторизации"""
+    st.markdown("### Вход в систему")
+    st.markdown("Введите данные для автозаполнения протокола")
+    
+    with st.form("login_form"):
+        name = st.text_input("Фамилия И.О.", placeholder="Например: Иванов И.И.")
+        workshop = st.text_input("Цех", placeholder="Например: Цех №5")
+        submitted = st.form_submit_button("Войти")
+        
+        if submitted and name and workshop:
+            st.session_state.user_name = name
+            st.session_state.user_workshop = workshop
+            st.session_state.logged_in = True
+            st.rerun()
+        elif submitted:
+            st.warning("Заполните все поля")
+
+# ============================================================
+# БЛОК 4: НАСТРОЙКА СТРАНИЦЫ
+# ============================================================
+
+if MOBILE:
+    st.set_page_config(
+        page_title="Калькулятор углеводородов",
+        page_icon="🧪",
+        layout="centered"
+    )
+else:
+    st.set_page_config(
+        page_title="Калькулятор свойств углеводородов",
+        page_icon="🧪",
+        layout="wide"
+    )
+
+# Инициализация сессионных переменных
+SESSION_KEYS = [
+    'logged_in', 'user_name', 'user_workshop', 'show_report',
+    'result_PR', 'result_GERG', 'T_C', 'P_MPa', 'method',
+    'components', 'input_type', 'user_sensor', 'quote_shown',
+    'report_filename', 'report_text', 'components_input'
+]
+
+for key in SESSION_KEYS:
+    if key not in st.session_state:
+        if key == 'logged_in':
+            st.session_state.logged_in = False
+        elif key in ['user_name', 'user_workshop', 'user_sensor', 'method', 'input_type']:
+            st.session_state[key] = '' if key in ['user_name', 'user_workshop', 'user_sensor'] else 'Сравнение методов'
+            if key == 'input_type':
+                st.session_state.input_type = 'Мольные'
+        elif key in ['result_PR', 'result_GERG', 'T_C', 'P_MPa']:
+            st.session_state[key] = None
+        elif key in ['components', 'components_input']:
+            st.session_state[key] = {}
+        else:
+            st.session_state[key] = False
+
+# ============================================================
+# БЛОК 5: АВТОРИЗАЦИЯ
+# ============================================================
+
+if not st.session_state.logged_in:
+    login_form()
+    st.stop()
+
+# ============================================================
+# БЛОК 6: ОСНОВНОЙ ИНТЕРФЕЙС
+# ============================================================
+
+col_title, col_logout = st.columns([4, 1] if not MOBILE else [3, 1])
+
+with col_title:
+    if MOBILE:
+        st.title("Углеводороды")
+        st.markdown("### Расчет Z, ρ, μ")
+    else:
+        st.markdown('<h1 class="sci-fi-title">Калькулятор свойств углеводородов</h1>', unsafe_allow_html=True)
+        st.markdown("### Расчет Z-фактора, плотности и вязкости газовых смесей")
+
+with col_logout:
+    st.write("")
+    st.write("")
+    if st.button("Выйти", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.user_name = ''
+        st.session_state.user_workshop = ''
+        st.rerun()
+
+st.caption(f"Пользователь: {st.session_state.user_name} | {st.session_state.user_workshop}")
+
+# Отображение цитаты
+if not st.session_state.quote_shown:
+    quote_text, quote_author = get_random_quote()
+    if MOBILE and len(quote_text) > 80:
+        quote_text = quote_text[:77] + "..."
+    st.markdown(
+        f'<div class="quote">«{quote_text}»<span class="quote-author">— {quote_author}</span></div>',
+        unsafe_allow_html=True
+    )
+    st.session_state.quote_shown = True
+
+@st.cache_resource
+def get_calculator():
+    return SHFLUCalculator()
+
+calculator = get_calculator()
+
+# Молекулярные массы для пересчета
+MW_MAP = {
+    'helium': 4.003, 'hydrogen': 2.016, 'oxygen': 32.000,
+    'nitrogen': 28.013, 'co2': 44.010,
+    'methane': 16.043, 'ethane': 30.070, 'propane': 44.097,
+    'n-butane': 58.123, 'i-butane': 58.123,
+    'n-pentane': 72.151, 'i-pentane': 72.151,
+    'hexane': 86.178, 'heptane': 100.205,
+    'octane': 114.232, 'nonane': 128.259, 'decane': 142.286,
+    'c6plus': 100.000
+}
+
+# Разделение на колонки
+if MOBILE:
+    col1, col2 = st.columns([1])
+else:
+    col1, col2 = st.columns([1, 1])
+
+# ============================================================
+# БЛОК 7: ЛЕВАЯ КОЛОНКА — ВВОД ДАННЫХ
+# ============================================================
+
+with col1:
+    st.header("Входные данные")
+    
+    with st.expander("Условия расчета", expanded=True):
+        T_C = st.number_input("Температура (°C)", value=35.0, min_value=-50.0, max_value=150.0, step=1.0)
+        P_MPa = st.number_input("Давление (МПа)", value=2.5, min_value=0.001, max_value=10.0, step=0.1)
+    
+    with st.expander("Метод расчета", expanded=True):
+        method = st.selectbox("Выберите метод:", ["Пенга-Робинсон", "GERG-2008", "Сравнение методов"])
+    
+    with st.expander("Тип долей", expanded=True):
+        input_type = st.radio("Тип данных:", ["Мольные", "Массовые"], index=0)
+        if input_type == "Массовые":
+            st.info("Автоматический пересчет в мольные")
+    
+    with st.expander("Состав смеси", expanded=not MOBILE):
+        st.markdown(f"**{input_type} доли компонентов:**")
+        st.markdown("*Сумма = 100%*")
+        
+        component_order = [
+            ('helium', 'Гелий'), ('hydrogen', 'Водород'), ('oxygen', 'Кислород'),
+            ('nitrogen', 'Азот'), ('co2', 'CO₂'),
+            ('methane', 'Метан C1'), ('ethane', 'Этан C2'), ('propane', 'Пропан C3'),
+            ('n-butane', 'н-Бутан C4'), ('i-butane', 'iC4'),
+            ('n-pentane', 'н-Пентан C5'), ('i-pentane', 'iC5'),
+            ('c6plus', 'C6+'),
+            ('hexane', 'Гексан C6'), ('heptane', 'Гептан C7'),
+            ('octane', 'Октан C8'), ('nonane', 'Нонан C9'), ('decane', 'Декан C10'),
+        ]
+        
+        default_values = {
+            'helium': 0.0, 'hydrogen': 0.0, 'oxygen': 0.0,
+            'nitrogen': 3.0, 'co2': 0.0,
+            'methane': 80.0, 'ethane': 12.0, 'propane': 5.0,
+            'n-butane': 0.0, 'i-butane': 0.0,
+            'n-pentane': 0.0, 'i-pentane': 0.0,
+            'c6plus': 0.0,
+            'hexane': 0.0, 'heptane': 0.0, 'octane': 0.0,
+            'nonane': 0.0, 'decane': 0.0
+        }
+        
+        if MOBILE:
+            comp_col1, comp_col2 = st.columns(2)
+            comp_col3 = None
+        else:
+            comp_col1, comp_col2, comp_col3 = st.columns(3)
+        
+        components_input = {}
+        for i, (key, display_name) in enumerate(component_order):
+            if i % 3 == 0:
+                col = comp_col1
+            elif i % 3 == 1:
+                col = comp_col2
+            else:
+                col = comp_col3 if comp_col3 is not None else comp_col1
+            
+            components_input[key] = col.number_input(
+                display_name,
+                value=default_values[key],
+                min_value=0.0,
+                max_value=100.0,
+                step=0.1,
+                key=f"comp_{key}_{input_type}"
+            )
+        
+        st.markdown("---")
+        if st.button("Загрузить пример", use_container_width=True):
+            example = {
+                'helium': 0.0, 'hydrogen': 0.0, 'oxygen': 0.0,
+                'nitrogen': 3.0, 'co2': 0.0,
+                'methane': 80.0, 'ethane': 12.0, 'propane': 5.0,
+                'n-butane': 0.0, 'i-butane': 0.0,
+                'n-pentane': 0.0, 'i-pentane': 0.0,
+                'c6plus': 0.0,
+                'hexane': 0.0, 'heptane': 0.0, 'octane': 0.0,
+                'nonane': 0.0, 'decane': 0.0
+            }
+            for name, value in example.items():
+                components_input[name] = value
+            st.rerun()
+        
+        # Отображение суммы с нормализацией
+        total = sum(components_input.values())
+        if total > 0 and abs(total - 100) > 0.01:
+            st.warning(f"Сумма = {total:.1f}% (будет нормализована до 100%)")
+        elif abs(total - 100) <= 0.01 and total > 0:
+            st.success(f"Сумма = {total:.1f}%")
+        else:
+            st.info("Введите состав смеси")
+    
+    user_sensor = st.text_input("Датчик", placeholder="Например: PT-101", key="sensor_input")
+    st.session_state.user_sensor = user_sensor
+    
+    st.markdown("---")
+    
+    button_label = "Рассчитать" if not MOBILE else "Расчет"
+    if st.button(button_label, type="primary", use_container_width=True):
+        st.session_state.quote_shown = False
+        
+        # ---- НОРМАЛИЗАЦИЯ СОСТАВА ----
+        total = sum(components_input.values())
+        if total > 0 and abs(total - 100) > 0.01:
+            for key in components_input:
+                components_input[key] = (components_input[key] / total) * 100
+        
+        zs = []
+        comp_names = []
+        
+        name_map = {
+            'helium': 'helium', 'hydrogen': 'hydrogen', 'oxygen': 'oxygen',
+            'nitrogen': 'nitrogen', 'co2': 'co2',
+            'methane': 'methane', 'ethane': 'ethane', 'propane': 'propane',
+            'n-butane': 'n-butane', 'i-butane': 'i-butane',
+            'n-pentane': 'n-pentane', 'i-pentane': 'i-pentane',
+            'hexane': 'hexane', 'heptane': 'heptane',
+            'octane': 'octane', 'nonane': 'nonane', 'decane': 'decane'
+        }
+        
+        # ---- УСЛОВИЕ: ЕСЛИ C6+ = 0, ПРОПУСКАЕМ РАЗБИВКУ ----
+        # ключ 'c6plus' не добавляется в расчет, он только для отображения
+        
+        if input_type == "Массовые":
+            components_for_calc = mass_to_mole(components_input, MW_MAP)
+            components_display = components_for_calc
+        else:
+            components_for_calc = components_input
+            components_display = components_input
+        
+        for key, value in components_for_calc.items():
+            if key != 'c6plus' and value > 0:
+                comp_names.append(name_map.get(key, key))
+                zs.append(value / 100)
+        
+        if abs(sum(zs) - 1) > 0.01:
+            st.error(f"Сумма молярных долей = {sum(zs)*100:.1f}% (должна быть 100%)")
+        else:
+            try:
+                st.session_state.input_type = input_type
+                
+                calc_PR = SHFLUCalculator(method='PR')
+                calc_PR.set_composition(comp_names, zs)
+                calc_PR.set_conditions(T_C, P_MPa)
+                result_PR = calc_PR.calculate()
+                
+                calc_GERG = SHFLUCalculator(method='GERG')
+                calc_GERG.set_composition(comp_names, zs)
+                calc_GERG.set_conditions(T_C, P_MPa)
+                result_GERG = calc_GERG.calculate()
+                
+                st.session_state.result_PR = result_PR
+                st.session_state.result_GERG = result_GERG
+                st.session_state.T_C = T_C
+                st.session_state.P_MPa = P_MPa
+                st.session_state.method = method
+                st.session_state.components = components_display
+                st.session_state.components_input = components_input
+                
+                st.success("Расчет выполнен")
+                
+                os.makedirs("reports", exist_ok=True)
+                
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"reports/protokol_{timestamp}_{st.session_state.user_sensor}.txt"
+                
+                report_text = generate_report(
+                    result_PR, result_GERG, components_display,
+                    T_C, P_MPa, method,
+                    st.session_state.user_name,
+                    st.session_state.user_workshop,
+                    st.session_state.user_sensor,
+                    input_type, components_input
+                )
+                
+                with open(filename, 'w', encoding='utf-8') as f:
+                    f.write(report_text)
+                
+                st.session_state.report_filename = filename
+                st.session_state.report_text = report_text
+                st.session_state.show_report = True
+                
+                st.info(f"Протокол сохранен")
+                
+            except Exception as e:
+                st.error(f"Ошибка: {str(e)}")
+
+# ============================================================
+# БЛОК 8: ПРАВАЯ КОЛОНКА — РЕЗУЛЬТАТЫ
+# ============================================================
+
+if col2 is not None:
+    with col2:
+        st.header("Результаты")
+        
+        if st.session_state.result_PR is not None and st.session_state.result_GERG is not None:
+            result_PR = st.session_state.result_PR
+            result_GERG = st.session_state.result_GERG
+            method = st.session_state.method
+            input_type = st.session_state.get('input_type', 'Мольные')
+            
+            if method == "Пенга-Робинсон":
+                result = result_PR
+                st.info("Метод: Пенга-Робинсон")
+            elif method == "GERG-2008":
+                result = result_GERG
+                st.info("Метод: GERG-2008")
+            else:
+                result = None
+                st.info("Сравнение методов")
+            
+            type_label = "Массовые" if input_type == "Массовые" else "Мольные"
+            st.caption(f"Тип долей: {type_label}")
+            
+            with st.expander("Основные параметры", expanded=True):
+                if MOBILE:
+                    col_met1, col_met2 = st.columns(2)
+                    col_met3 = st.columns(1)[0]
+                else:
+                    col_met1, col_met2, col_met3 = st.columns(3)
+                
+                with col_met1:
+                    st.metric("T", f"{st.session_state.T_C:.1f}°C")
+                with col_met2:
+                    st.metric("P", f"{st.session_state.P_MPa:.3f} МПа")
+                with col_met3:
+                    st.metric("M", f"{result_PR['MW']:.3f} кг/кмоль")
+            
+            if result and result.get('success', False):
+                with st.expander("Результаты расчета", expanded=True):
+                    col_z, col_rho = st.columns(2)
+                    
+                    with col_z:
+                        st.metric("Z-фактор", f"{result['Z']:.6f}")
+                    
+                    with col_rho:
+                        if result.get('rho_gas') is not None:
+                            st.metric("Плотность", f"{result['rho_gas']:.3f} кг/м³")
+                        elif result.get('rho_liquid') is not None:
+                            st.metric("Плотность", f"{result['rho_liquid']:.3f} кг/м³")
+                        elif result.get('rho') is not None:
+                            st.metric("Плотность", f"{result['rho']:.3f} кг/м³")
+                        else:
+                            st.metric("Плотность", "—")
+                    
+                    mu = result.get('mu_dynamic')
+                    if mu is not None:
+                        mu_cP = mu * 1000
+                        rho_for_nu = result.get('rho_gas') or result.get('rho_liquid') or result.get('rho') or 1.0
+                        nu_cSt = (mu / rho_for_nu) * 1e6
+                        
+                        col_visc1, col_visc2 = st.columns(2)
+                        with col_visc1:
+                            st.metric("Динамическая вязкость", f"{mu_cP:.4f} сП")
+                        with col_visc2:
+                            st.metric("Кинематическая вязкость", f"{nu_cSt:.4f} сСт")
+                    else:
+                        st.info("Вязкость не рассчитана")
+            
+            if method == "Сравнение методов":
+                with st.expander("Сравнение методов", expanded=True):
+                    if result_PR.get('success', False) and result_GERG.get('success', False):
+                        Z_PR = result_PR['Z']
+                        Z_GERG = result_GERG['Z']
+                        diff = abs(Z_PR - Z_GERG) / Z_GERG * 100
+                        
+                        if MOBILE:
+                            col_comp1, col_comp2 = st.columns(2)
+                            col_comp3 = st.columns(1)[0]
+                        else:
+                            col_comp1, col_comp2, col_comp3 = st.columns(3)
+                        
+                        with col_comp1:
+                            st.metric("Пенга-Робинсон", f"{Z_PR:.6f}")
+                        with col_comp2:
+                            st.metric("GERG-2008", f"{Z_GERG:.6f}")
+                        with col_comp3:
+                            st.metric("Разница", f"{diff:.3f}%")
+            
+            with st.expander("Данные пользователя", expanded=False):
+                st.text(f"ФИО: {st.session_state.user_name}")
+                st.text(f"Цех: {st.session_state.user_workshop}")
+                st.text(f"Датчик: {st.session_state.user_sensor}")
+                st.text(f"Дата: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            
+            if st.button("Показать протокол", use_container_width=True):
+                st.session_state.show_report = True
+            
+            if st.session_state.show_report:
+                with st.expander("Протокол расчета", expanded=True):
+                    if 'report_text' in st.session_state:
+                        if MOBILE:
+                            st.text(st.session_state.report_text)
+                        else:
+                            st.code(st.session_state.report_text, language='text')
+                        
+                        if 'report_filename' in st.session_state:
+                            st.info(f"Файл: {st.session_state.report_filename}")
+                        
+                        if st.button("Закрыть"):
+                            st.session_state.show_report = False
+                            st.rerun()
+                    else:
+                        st.warning("Протокол не найден")
+        
+        else:
+            st.info("Заполните данные и нажмите 'Рассчитать'")
+
+# ============================================================
+# БЛОК 9: ПОДВАЛ
+# ============================================================
+
+st.markdown(f"""
+<div class="footer">
+    <div class="company">Калькулятор свойств углеводородов</div>
+    <div class="group">ООО «ИЗП» · Группа моделирования технологических процессов</div>
+    <div class="lead">под руководством Клепцова Д.В.</div>
+    <div style="margin-top:10px; font-size:12px; color:#95a5a6;">
+        Python · Streamlit · Peng-Robinson · GERG-2008
+    </div>
+</div>
+""", unsafe_allow_html=True)
