@@ -13,7 +13,6 @@ JOKES = [
     "🌀 Калькулятор завис на расчете Z-фактора. Перезапускаем вселенную...",
     "🔧 Программист уже в пути с ведром воды. Скоро починим!",
     "🥵 Калькулятор жарится как шашлык. Дайте ему отдохнуть!",
-    "🎲 Мы загружаем новые шутки вместо расчетов. Ждите!",
     "💻 Калькулятор ушел за молоком. Вернется к обеду."
 ]
 
@@ -25,17 +24,14 @@ def get_random_joke():
 def get_random_icon():
     return random.choice(ICONS)
 
-# === CSS ===
+# === УПРОЩЕННЫЙ CSS (без анимаций) ===
 st.markdown("""
 <style>
     .main-title {
-        font-size: 60px;
+        font-size: 50px;
         font-weight: 900;
         text-align: center;
-        background: linear-gradient(135deg, #ff6b35, #ff2d2d);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        animation: pulse 2s infinite;
+        color: #ff2d2d;
     }
     .subtitle {
         font-size: 20px;
@@ -67,19 +63,9 @@ st.markdown("""
         border-top: 1px solid #eee;
         padding-top: 20px;
     }
-    @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.05); }
-        100% { transform: scale(1); }
-    }
     .thermometer {
         font-size: 80px;
         text-align: center;
-        animation: shake 0.5s infinite alternate;
-    }
-    @keyframes shake {
-        0% { transform: rotate(-5deg); }
-        100% { transform: rotate(5deg); }
     }
     .progress-text {
         font-size: 14px;
@@ -112,7 +98,7 @@ with col1:
     st.metric("Температура процессора", "🔥 95°C", "Зашкаливает!")
 
 with col2:
-    st.metric("Осталось до охлаждения", "≈ неизвестно", "Остывает")
+    st.metric("Осталось до охлаждения", "≈ 15 минут", "Остывает")
 
 st.markdown("---")
 st.markdown('<div style="text-align: center; color: #ff6b35; font-size: 18px;">Приносим свои извинения за неудобства!</div>', unsafe_allow_html=True)
