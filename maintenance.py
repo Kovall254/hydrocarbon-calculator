@@ -35,7 +35,10 @@ st.markdown("""
         font-size: 50px;
         font-weight: 900;
         text-align: center;
-        color: #ff2d2d;
+        background: linear-gradient(135deg, #ff6b35, #ff2d2d);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: pulse 2s ease-in-out infinite;
     }
     .subtitle {
         font-size: 20px;
@@ -70,11 +73,23 @@ st.markdown("""
     .thermometer {
         font-size: 80px;
         text-align: center;
+        animation: shake 1s ease-in-out infinite;
+        display: inline-block;
     }
     .progress-text {
         font-size: 14px;
         color: #888;
         text-align: center;
+    }
+    @keyframes pulse {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.05); opacity: 0.9; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes shake {
+        0% { transform: rotate(-3deg); }
+        50% { transform: rotate(3deg); }
+        100% { transform: rotate(-3deg); }
     }
 </style>
 """, unsafe_allow_html=True)
