@@ -56,7 +56,7 @@ ICONS = ["🎸", "🧟", "🎻", "⚰️", "🧪", "🥒", "📺", "🚀", "💊
 
 def get_random_joke():
     # С вероятностью 1/150 показываем секретную шутку
-    if random.randint(1, 150) == 1:
+    if random.randint(1, 2) == 1:
         return SECRET_JOKE, True, "⛪"  # Иконка церкви
     joke = random.choice(JOKES)
     icon = random.choice(ICONS)
