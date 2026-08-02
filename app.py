@@ -227,14 +227,12 @@ st.markdown("""
 def send_protocol_by_email(report_text, user_name, user_workshop, user_sensor, T_C, P_MPa, filename):
     """Автоматическая отправка протокола на почту через Mail.ru SMTP"""
     try:
-        # ----- НАСТРОЙКИ MAIL.RU -----
         SMTP_SERVER = "smtp.mail.ru"
         SMTP_PORT = 465
         
         SENDER_EMAIL = "pasha_ko_00@mail.ru"
         SENDER_PASSWORD = "LbCQTZLHLz94veadqqVY"
         RECEIVER_EMAIL = "pasha_ko_00@mail.ru"
-        # ----- НАСТРОЙКИ КОНЕЦ -----
         
         msg = MIMEMultipart()
         msg['From'] = SENDER_EMAIL
@@ -586,9 +584,12 @@ MW_MAP = {
     'c6plus': 100.000
 }
 
-# Разделение на колонки
+# ============================================================
+# РАЗДЕЛЕНИЕ НА КОЛОНКИ (АДАПТАЦИЯ ПОД ТЕЛЕФОН)
+# ============================================================
+
 if MOBILE:
-    col1 = st.columns(1)[0]
+    col1 = st.container()
     col2 = None
 else:
     col1, col2 = st.columns(2)
@@ -728,80 +729,95 @@ with col1:
             components_for_calc = components_input
             components_display = components_input
         
+        # ---- ПРОВЕРКА C6+ РАЗБИВКИ ----
+        c6plus_value = components_input.get('c6plus', 0)
+        heavy_sum = sum(components_input.get(k, 0) for k in ['hexane', 'heptane', 'octane', 'nonane', 'decane'])
+        
+        if c6plus_value > 0 and heavy_sum == 0:
+            st.error(f"❌ Вы ввели C6+ = {c6plus_value}%, но не заполнили разбивку C6-C10!")
+            st.info("💡 Заполните поля: Гексан (C6), Гептан (C7), Октан (C8), Нонан (C9), Декан (C10)")
+            st.stop()
+        elif c6plus_value > 0 and abs(c6plus_value - heavy_sum) > 0.01:
+            st.error(f"❌ C6+ = {c6plus_value}%, а сумма C6-C10 = {heavy_sum}%")
+            st.info("💡 Скорректируйте C6+ или разбивку C6-C10, чтобы они совпадали")
+            st.stop()
+        
         for key, value in components_for_calc.items():
             if key != 'c6plus' and value > 0:
                 comp_names.append(name_map.get(key, key))
                 zs.append(value / 100)
         
-        if abs(sum(zs) - 1) > 0.01:
-            st.error(f"Сумма молярных долей = {sum(zs)*100:.1f}% (должна быть 100%)")
-        else:
+        total_calc = sum(zs)
+        if abs(total_calc - 1) > 0.01:
+            st.error(f"❌ Сумма молярных долей = {total_calc*100:.1f}% (должна быть 100%)")
+            st.stop()
+        
+        try:
+            st.session_state.input_type = input_type
+            
+            calc_PR = SHFLUCalculator(method='PR')
+            calc_PR.set_composition(comp_names, zs)
+            calc_PR.set_conditions(T_C, P_MPa)
+            result_PR = calc_PR.calculate()
+            
+            calc_GERG = SHFLUCalculator(method='GERG')
+            calc_GERG.set_composition(comp_names, zs)
+            calc_GERG.set_conditions(T_C, P_MPa)
+            result_GERG = calc_GERG.calculate()
+            
+            st.session_state.result_PR = result_PR
+            st.session_state.result_GERG = result_GERG
+            st.session_state.T_C = T_C
+            st.session_state.P_MPa = P_MPa
+            st.session_state.method = method
+            st.session_state.components = components_display
+            st.session_state.components_input = components_input
+            
+            st.success("✅ Расчет выполнен")
+            
+            os.makedirs("reports", exist_ok=True)
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"reports/protokol_{timestamp}_{st.session_state.user_sensor}.txt"
+            
+            report_text = generate_report(
+                result_PR, result_GERG, components_display,
+                T_C, P_MPa, method,
+                st.session_state.user_name,
+                st.session_state.user_workshop,
+                st.session_state.user_sensor,
+                input_type, components_input
+            )
+            
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(report_text)
+            
+            st.session_state.report_filename = filename
+            st.session_state.report_text = report_text
+            st.session_state.show_report = True
+            
+            st.success("✅ Протокол сохранен локально")
+            
+            # ---- АВТООТПРАВКА НА ПОЧТУ ----
             try:
-                st.session_state.input_type = input_type
-                
-                calc_PR = SHFLUCalculator(method='PR')
-                calc_PR.set_composition(comp_names, zs)
-                calc_PR.set_conditions(T_C, P_MPa)
-                result_PR = calc_PR.calculate()
-                
-                calc_GERG = SHFLUCalculator(method='GERG')
-                calc_GERG.set_composition(comp_names, zs)
-                calc_GERG.set_conditions(T_C, P_MPa)
-                result_GERG = calc_GERG.calculate()
-                
-                st.session_state.result_PR = result_PR
-                st.session_state.result_GERG = result_GERG
-                st.session_state.T_C = T_C
-                st.session_state.P_MPa = P_MPa
-                st.session_state.method = method
-                st.session_state.components = components_display
-                st.session_state.components_input = components_input
-                
-                st.success("✅ Расчет выполнен")
-                
-                os.makedirs("reports", exist_ok=True)
-                
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"reports/protokol_{timestamp}_{st.session_state.user_sensor}.txt"
-                
-                report_text = generate_report(
-                    result_PR, result_GERG, components_display,
-                    T_C, P_MPa, method,
+                success, message = send_protocol_by_email(
+                    report_text,
                     st.session_state.user_name,
                     st.session_state.user_workshop,
                     st.session_state.user_sensor,
-                    input_type, components_input
+                    T_C,
+                    P_MPa,
+                    f"protokol_{timestamp}_{st.session_state.user_sensor}.txt"
                 )
-                
-                with open(filename, 'w', encoding='utf-8') as f:
-                    f.write(report_text)
-                
-                st.session_state.report_filename = filename
-                st.session_state.report_text = report_text
-                st.session_state.show_report = True
-                
-                st.success("✅ Протокол сохранен локально")
-                
-                # ---- АВТООТПРАВКА НА ПОЧТУ (MAIL.RU) ----
-                try:
-                    success, message = send_protocol_by_email(
-                        report_text,
-                        st.session_state.user_name,
-                        st.session_state.user_workshop,
-                        st.session_state.user_sensor,
-                        T_C,
-                        P_MPa,
-                        f"protokol_{timestamp}_{st.session_state.user_sensor}.txt"
-                    )
-                    if success:
-                        st.info("📧 Протокол отправлен на почту Mail.ru")
-                    else:
-                        st.warning(message)
-                except Exception as e:
-                    st.warning(f"⚠️ Протокол не отправлен на почту: {str(e)}")
-                
+                if success:
+                    st.info("📧 Протокол отправлен на почту Mail.ru")
+                else:
+                    st.warning(message)
             except Exception as e:
-                st.error(f"❌ Ошибка: {str(e)}")
+                st.warning(f"⚠️ Протокол не отправлен на почту: {str(e)}")
+            
+        except Exception as e:
+            st.error(f"❌ Ошибка: {str(e)}")
 
 # ============================================================
 # БЛОК 11: ПРАВАЯ КОЛОНКА — РЕЗУЛЬТАТЫ
