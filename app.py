@@ -50,26 +50,22 @@ JOKES = [
 ]
 
 # === СЕКРЕТНАЯ ПРАВОСЛАВНАЯ ШУТКА (1/150) ===
-SECRET_JOKE = "🙏 «Прости меня, инженер, ибо согрешил я — перегрелся на работе» — сказал калькулятор."
+SECRET_JOKE = "«Прости меня, инженер, ибо согрешил я — перегрелся на работе» — сказал калькулятор."
 
 ICONS = ["🎸", "🧟", "🎻", "⚰️", "🧪", "🥒", "📺", "🚀", "💊", "🕶️", "🐇", "💀", "🔫", "🤖", "🧪", "🧊", "🔥", "💰", "💍", "🧙", "🔥", "⛰️"]
 
 def get_random_joke():
     # С вероятностью 1/150 показываем секретную шутку
-    if random.randint(1, 2) == 1:
-        return SECRET_JOKE, True
-    return random.choice(JOKES), False
+    if random.randint(1, 150) == 1:
+        return SECRET_JOKE, True, "⛪"  # Иконка церкви
+    joke = random.choice(JOKES)
+    icon = random.choice(ICONS)
+    return joke, False, icon
 
-def get_random_icon():
-    return random.choice(ICONS)
-
-# Получаем шутку
-joke, is_secret = get_random_joke()
-icon = get_random_icon()
+joke, is_secret, icon = get_random_joke()
 
 # === CSS ===
 if is_secret:
-    # Секретная шутка — золотой стиль с пульсацией
     st.markdown(f"""
     <style>
         .main-title {{
@@ -117,6 +113,12 @@ if is_secret:
             padding-top: 20px;
             opacity: 0.7;
         }}
+        .footer-text .church {{
+            margin-top: 8px;
+            color: #FFD700;
+            font-size: 16px;
+            text-shadow: 0 0 15px rgba(255,215,0,0.2);
+        }}
         .thermometer {{
             font-size: 90px;
             text-align: center;
@@ -154,7 +156,6 @@ if is_secret:
     </style>
     """, unsafe_allow_html=True)
 else:
-    # Обычный стиль
     st.markdown("""
     <style>
         .main-title {
@@ -243,11 +244,9 @@ else:
 st.markdown('<div class="thermometer">🌡️</div>', unsafe_allow_html=True)
 
 if is_secret:
-    # Секретная шутка — золотой заголовок
     st.markdown('<div class="main-title">КАЛЬКУЛЯТОР СОГРЕШИЛ</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Требуется отпущение грехов</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Требуется покаяние</div>', unsafe_allow_html=True)
 else:
-    # Обычный заголовок
     st.markdown('<div class="main-title">КАЛЬКУЛЯТОР ПЕРЕГРЕЛСЯ</div>', unsafe_allow_html=True)
     st.markdown('<div class="subtitle">Требуется охлаждение</div>', unsafe_allow_html=True)
 
@@ -264,11 +263,11 @@ if is_secret:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div class="metric">', unsafe_allow_html=True)
-        st.metric("Температура души", "🔥 99°C", "Грешен")
+        st.metric("Жар души", "🔥 99°C", "Согрешил")
         st.markdown('</div>', unsafe_allow_html=True)
     with col2:
         st.markdown('<div class="metric">', unsafe_allow_html=True)
-        st.metric("Осталось до прощения", "⏳ Неизвестно", "Батюшка ищет кадило")
+        st.metric("Осталось до покаяния", "⏳ Неизвестно", "Батюшка уже в пути")
         st.markdown('</div>', unsafe_allow_html=True)
 else:
     col1, col2 = st.columns(2)
@@ -300,6 +299,9 @@ if is_secret:
         <small style="text-shadow: 0 0 10px rgba(255,215,0,0.1);">
             Калькулятор вернется в строй, когда получит отпущение грехов
         </small>
+        <div class="church">
+            ⛪ Уже обратились к священнику
+        </div>
     </div>
     """, unsafe_allow_html=True)
 else:
