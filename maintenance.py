@@ -25,7 +25,7 @@ def get_random_joke():
 def get_random_icon():
     return random.choice(ICONS)
 
-# CSS
+# === CSS ===
 st.markdown("""
 <style>
     .main-title {
