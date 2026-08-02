@@ -643,15 +643,13 @@ with col1:
             'nonane': 0.0, 'decane': 0.0
         }
         
-        # Инициализация компонентов из session_state
-        components_input = {}
-        
         if MOBILE:
             comp_col1, comp_col2 = st.columns(2)
             comp_col3 = None
         else:
             comp_col1, comp_col2, comp_col3 = st.columns(3)
         
+        components_input = {}
         for i, (key, display_name) in enumerate(component_order):
             if i % 3 == 0:
                 col = comp_col1
@@ -660,7 +658,7 @@ with col1:
             else:
                 col = comp_col3 if comp_col3 is not None else comp_col1
             
-            # Читаем значение из session_state, если есть
+            # Читаем значение из session_state
             session_key = f"comp_{key}_{input_type}"
             if session_key in st.session_state:
                 value = st.session_state[session_key]
@@ -675,6 +673,25 @@ with col1:
                 step=0.1,
                 key=session_key
             )
+        
+        # ---- АВТОМАТИЧЕСКАЯ РАЗБИВКА C6+ ----
+        c6plus_value = components_input.get('c6plus', 0)
+        
+        if c6plus_value > 0:
+            heavy_sum = sum(components_input.get(k, 0) for k in ['hexane', 'heptane', 'octane', 'nonane', 'decane'])
+            
+            # Если разбивка не заполнена или сильно отличается
+            if heavy_sum == 0 or abs(c6plus_value - heavy_sum) > 0.1:
+                coeffs = [0.7, 0.5, 0.35, 0.2, 0.15]
+                total_coeff = sum(coeffs)
+                normalized_coeffs = [c / total_coeff for c in coeffs]
+                
+                fractions = ['hexane', 'heptane', 'octane', 'nonane', 'decane']
+                for i, key in enumerate(fractions):
+                    if i < len(normalized_coeffs):
+                        new_value = c6plus_value * normalized_coeffs[i]
+                        st.session_state[f"comp_{key}_{input_type}"] = new_value
+                        components_input[key] = new_value
         
         st.markdown("---")
         
@@ -696,27 +713,13 @@ with col1:
                 }
                 for name, value in example.items():
                     st.session_state[f"comp_{name}_{input_type}"] = value
-                    components_input[name] = value
                 st.rerun()
         
         with col_btn2:
-            if st.button("🔧 Авторазбивка C6+", use_container_width=True):
-                c6plus_value = components_input.get('c6plus', 0)
-                if c6plus_value > 0:
-                    coeffs = [0.7, 0.5, 0.35, 0.2, 0.15]
-                    total_coeff = sum(coeffs)
-                    normalized_coeffs = [c / total_coeff for c in coeffs]
-                    
-                    fractions = ['hexane', 'heptane', 'octane', 'nonane', 'decane']
-                    for i, key in enumerate(fractions):
-                        if i < len(normalized_coeffs):
-                            st.session_state[f"comp_{key}_{input_type}"] = c6plus_value * normalized_coeffs[i]
-                        else:
-                            st.session_state[f"comp_{key}_{input_type}"] = 0
-                        components_input[key] = st.session_state[f"comp_{key}_{input_type}"]
-                    st.rerun()
-                else:
-                    st.warning("⚠️ Сначала введите значение C6+")
+            if st.button("Сбросить разбивку", use_container_width=True):
+                for key in ['hexane', 'heptane', 'octane', 'nonane', 'decane']:
+                    st.session_state[f"comp_{key}_{input_type}"] = 0
+                st.rerun()
         
         total = sum(components_input.values())
         if total > 0 and abs(total - 100) > 0.01:
@@ -768,11 +771,11 @@ with col1:
         
         if c6plus_value > 0 and heavy_sum == 0:
             st.error(f"❌ Вы ввели C6+ = {c6plus_value}%, но не заполнили разбивку C6-C10!")
-            st.info("💡 Нажмите кнопку 'Авторазбивка C6+' или заполните вручную")
+            st.info("💡 Используйте кнопку 'Сбросить разбивку' и введите C6+ заново")
             st.stop()
         elif c6plus_value > 0 and abs(c6plus_value - heavy_sum) > 0.01:
             st.error(f"❌ C6+ = {c6plus_value}%, а сумма C6-C10 = {heavy_sum}%")
-            st.info("💡 Скорректируйте C6+ или разбивку C6-C10, или используйте 'Авторазбивка C6+'")
+            st.info("💡 Используйте кнопку 'Сбросить разбивку' и введите C6+ заново")
             st.stop()
         
         for key, value in components_for_calc.items():
