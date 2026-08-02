@@ -668,22 +668,44 @@ with col1:
             )
         
         st.markdown("---")
-        if st.button("Загрузить пример", use_container_width=True):
-            example = {
-                'helium': 0.0, 'hydrogen': 0.0, 'oxygen': 0.0,
-                'nitrogen': 3.0, 'co2': 0.0,
-                'methane': 80.0, 'ethane': 12.0, 'propane': 5.0,
-                'n-butane': 0.0, 'i-butane': 0.0,
-                'n-pentane': 0.0, 'i-pentane': 0.0,
-                'c6plus': 0.0,
-                'benzene': 0.0,
-                'toluene': 0.0,
-                'hexane': 0.0, 'heptane': 0.0, 'octane': 0.0,
-                'nonane': 0.0, 'decane': 0.0
-            }
-            for name, value in example.items():
-                components_input[name] = value
-            st.rerun()
+        
+        col_btn1, col_btn2 = st.columns(2)
+        
+        with col_btn1:
+            if st.button("Загрузить пример", use_container_width=True):
+                example = {
+                    'helium': 0.0, 'hydrogen': 0.0, 'oxygen': 0.0,
+                    'nitrogen': 3.0, 'co2': 0.0,
+                    'methane': 80.0, 'ethane': 12.0, 'propane': 5.0,
+                    'n-butane': 0.0, 'i-butane': 0.0,
+                    'n-pentane': 0.0, 'i-pentane': 0.0,
+                    'c6plus': 0.0,
+                    'benzene': 0.0,
+                    'toluene': 0.0,
+                    'hexane': 0.0, 'heptane': 0.0, 'octane': 0.0,
+                    'nonane': 0.0, 'decane': 0.0
+                }
+                for name, value in example.items():
+                    components_input[name] = value
+                st.rerun()
+        
+        with col_btn2:
+            if st.button("🔧 Авторазбивка C6+", use_container_width=True):
+                c6plus_value = components_input.get('c6plus', 0)
+                if c6plus_value > 0:
+                    coeffs = [0.7, 0.5, 0.35, 0.2, 0.15]
+                    total_coeff = sum(coeffs)
+                    normalized_coeffs = [c / total_coeff for c in coeffs]
+                    
+                    fractions = ['hexane', 'heptane', 'octane', 'nonane', 'decane']
+                    for i, key in enumerate(fractions):
+                        if i < len(normalized_coeffs):
+                            components_input[key] = c6plus_value * normalized_coeffs[i]
+                        else:
+                            components_input[key] = 0
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Сначала введите значение C6+")
         
         total = sum(components_input.values())
         if total > 0 and abs(total - 100) > 0.01:
@@ -735,11 +757,11 @@ with col1:
         
         if c6plus_value > 0 and heavy_sum == 0:
             st.error(f"❌ Вы ввели C6+ = {c6plus_value}%, но не заполнили разбивку C6-C10!")
-            st.info("💡 Заполните поля: Гексан (C6), Гептан (C7), Октан (C8), Нонан (C9), Декан (C10)")
+            st.info("💡 Нажмите кнопку 'Авторазбивка C6+' или заполните вручную")
             st.stop()
         elif c6plus_value > 0 and abs(c6plus_value - heavy_sum) > 0.01:
             st.error(f"❌ C6+ = {c6plus_value}%, а сумма C6-C10 = {heavy_sum}%")
-            st.info("💡 Скорректируйте C6+ или разбивку C6-C10, чтобы они совпадали")
+            st.info("💡 Скорректируйте C6+ или разбивку C6-C10, или используйте 'Авторазбивка C6+'")
             st.stop()
         
         for key, value in components_for_calc.items():
