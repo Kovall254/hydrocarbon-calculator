@@ -18,6 +18,18 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 
+
+# ============================================================
+# ПРОВЕРКА РЕЖИМА ОБСЛУЖИВАНИЯ
+# ============================================================
+
+from config import MAINTENANCE_MODE
+
+if MAINTENANCE_MODE:
+    import maintenance
+    st.stop()
+
+
 # ============================================================
 # БЛОК 1: ИНИЦИАЛИЗАЦИЯ ТЕМЫ
 # ============================================================

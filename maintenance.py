@@ -1,0 +1,151 @@
+# ============================================================
+# maintenance.py - Страница "На обслуживании"
+# ============================================================
+
+import streamlit as st
+import random
+from datetime import datetime
+
+# Настройка страницы
+st.set_page_config(
+    page_title="Калькулятор на обслуживании",
+    page_icon="🌡️",
+    layout="centered"
+)
+
+# Список шуток
+JOKES = [
+    "🧊 Калькулятор перегрелся, программист бегает за льдом...",
+    "🔥 Слишком много расчетов — калькулятор ушел в отпуск на Бали.",
+    "🌡️ Температура калькулятора достигла 100°C. Нужно охлаждение!",
+    "🧪 Калькулятор залили кофе. Сейчас сушим феном...",
+    "⚡ Ошибка в системе: слишком много энтузиазма. Ждем перезагрузки.",
+    "🌀 Калькулятор завис на расчете Z-фактора. Перезапускаем вселенную...",
+    "🔧 Программист уже в пути с ведром воды. Скоро починим!",
+    "🥵 Калькулятор жарится как шашлык. Дайте ему отдохнуть!",
+    "🎲 Мы загружаем новые шутки вместо расчетов. Ждите!",
+    "💻 Калькулятор ушел за молоком. Вернется к обеду."
+]
+
+# Картинки (эмодзи)
+ICONS = [
+    "🌡️", "🔥", "🧊", "💻", "⚡", "🌀", "🔧", "🥵", "🎲", "🧪"
+]
+
+def get_random_joke():
+    return random.choice(JOKES)
+
+def get_random_icon():
+    return random.choice(ICONS)
+
+# === СТИЛИ ===
+st.markdown("""
+<style>
+    .main-title {
+        font-size: 60px;
+        font-weight: 900;
+        text-align: center;
+        background: linear-gradient(135deg, #ff6b35, #ff2d2d);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: pulse 2s infinite;
+    }
+    .subtitle {
+        font-size: 20px;
+        text-align: center;
+        color: #ff6b35;
+        margin-top: -10px;
+    }
+    .joke-box {
+        background: rgba(255, 107, 53, 0.1);
+        border: 2px solid #ff6b35;
+        border-radius: 15px;
+        padding: 30px;
+        margin: 20px 0;
+        text-align: center;
+        font-size: 24px;
+        font-weight: 600;
+        color: #ff6b35;
+    }
+    .joke-box .emoji {
+        font-size: 48px;
+        display: block;
+        margin-bottom: 15px;
+    }
+    .footer-text {
+        text-align: center;
+        color: #888;
+        font-size: 14px;
+        margin-top: 40px;
+        border-top: 1px solid #eee;
+        padding-top: 20px;
+    }
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+    .thermometer {
+        font-size: 80px;
+        text-align: center;
+        animation: shake 0.5s infinite alternate;
+    }
+    @keyframes shake {
+        0% { transform: rotate(-5deg); }
+        100% { transform: rotate(5deg); }
+    }
+    .progress-text {
+        font-size: 14px;
+        color: #888;
+        text-align: center;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# === ЗАГОЛОВОК ===
+st.markdown('<div class="thermometer">🌡️</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">КАЛЬКУЛЯТОР ПЕРЕГРЕЛСЯ</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Требуется охлаждение</div>', unsafe_allow_html=True)
+
+# === ШУТКА ===
+joke = get_random_joke()
+icon = get_random_icon()
+
+st.markdown(f"""
+<div class="joke-box">
+    <span class="emoji">{icon}</span>
+    {joke}
+</div>
+""", unsafe_allow_html=True)
+
+# === ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ ===
+st.markdown("---")
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric("Температура процессора", "🔥 95°C", "Зашкаливает!")
+
+with col2:
+    st.metric("Осталось до охлаждения", "≈ 15 минут", "Остывает")
+
+with col3:
+    st.metric("Количество шуток", f"{len(JOKES)}", "Загружено")
+
+st.markdown("---")
+st.markdown('<div style="text-align: center; color: #ff6b35; font-size: 18px;">Приносим свои извинения за неудобства!</div>', unsafe_allow_html=True)
+
+# === ДОПОЛНИТЕЛЬНЫЕ ШУТКИ (обновляются при перезагрузке) ===
+st.markdown("---")
+st.markdown('<div class="progress-text">⚡ Программист уже бежит с вёдрами... ⚡</div>', unsafe_allow_html=True)
+
+# Кнопка обновления шутки
+if st.button("🔄 Показать другую шутку", use_container_width=True):
+    st.rerun()
+
+# === ПОДВАЛ ===
+st.markdown(f"""
+<div class="footer-text">
+    © ООО «ИЗП» · Группа моделирования технологических процессов<br>
+    <small>Калькулятор вернется в строй {datetime.now().strftime('%H:%M') + ' +15 мин'}</small>
+</div>
+""", unsafe_allow_html=True)
