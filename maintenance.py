@@ -1,17 +1,7 @@
-# ============================================================
 # maintenance.py - Страница "На обслуживании"
-# ============================================================
-
 import streamlit as st
 import random
 from datetime import datetime
-
-# Настройка страницы
-st.set_page_config(
-    page_title="Калькулятор на обслуживании",
-    page_icon="🌡️",
-    layout="centered"
-)
 
 # Список шуток
 JOKES = [
@@ -27,10 +17,7 @@ JOKES = [
     "💻 Калькулятор ушел за молоком. Вернется к обеду."
 ]
 
-# Картинки (эмодзи)
-ICONS = [
-    "🌡️", "🔥", "🧊", "💻", "⚡", "🌀", "🔧", "🥵", "🎲", "🧪"
-]
+ICONS = ["🌡️", "🔥", "🧊", "💻", "⚡", "🌀", "🔧", "🥵", "🎲", "🧪"]
 
 def get_random_joke():
     return random.choice(JOKES)
@@ -38,7 +25,18 @@ def get_random_joke():
 def get_random_icon():
     return random.choice(ICONS)
 
-# === СТИЛИ ===
+# ПРОВЕРКА: если страница уже настроена, не настраиваем повторно
+if not hasattr(st, '_is_running_with_streamlit'):
+    try:
+        st.set_page_config(
+            page_title="Калькулятор на обслуживании",
+            page_icon="🌡️",
+            layout="centered"
+        )
+    except:
+        pass
+
+# CSS
 st.markdown("""
 <style>
     .main-title {
@@ -102,12 +100,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# === ЗАГОЛОВОК ===
+# === СОДЕРЖАНИЕ ===
 st.markdown('<div class="thermometer">🌡️</div>', unsafe_allow_html=True)
 st.markdown('<div class="main-title">КАЛЬКУЛЯТОР ПЕРЕГРЕЛСЯ</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">Требуется охлаждение</div>', unsafe_allow_html=True)
 
-# === ШУТКА ===
 joke = get_random_joke()
 icon = get_random_icon()
 
@@ -134,18 +131,15 @@ with col3:
 st.markdown("---")
 st.markdown('<div style="text-align: center; color: #ff6b35; font-size: 18px;">Приносим свои извинения за неудобства!</div>', unsafe_allow_html=True)
 
-# === ДОПОЛНИТЕЛЬНЫЕ ШУТКИ (обновляются при перезагрузке) ===
 st.markdown("---")
 st.markdown('<div class="progress-text">⚡ Программист уже бежит с вёдрами... ⚡</div>', unsafe_allow_html=True)
 
-# Кнопка обновления шутки
 if st.button("🔄 Показать другую шутку", use_container_width=True):
     st.rerun()
 
-# === ПОДВАЛ ===
 st.markdown(f"""
 <div class="footer-text">
     © ООО «ИЗП» · Группа моделирования технологических процессов<br>
-    <small>Калькулятор вернется в строй {datetime.now().strftime('%H:%M') + ' +15 мин'}</small>
+    <small>Калькулятор вернется в строй примерно {datetime.now().strftime('%H:%M') + ' +15 мин'}</small>
 </div>
 """, unsafe_allow_html=True)

@@ -1,11 +1,34 @@
 # ============================================================
+# ПРОВЕРКА РЕЖИМА ОБСЛУЖИВАНИЯ (САМЫЙ ПЕРВЫЙ БЛОК)
+# ============================================================
+
+import streamlit as st
+
+# Читаем режим из конфига
+try:
+    from config import MAINTENANCE_MODE
+except:
+    MAINTENANCE_MODE = False
+
+if MAINTENANCE_MODE:
+    # Устанавливаем конфиг страницы ДО загрузки основного кода
+    st.set_page_config(
+        page_title="Калькулятор на обслуживании",
+        page_icon="🌡️",
+        layout="centered"
+    )
+    
+    # Импортируем и запускаем страницу обслуживания
+    import maintenance
+    st.stop()
+
+# ============================================================
 # МОДУЛЬ: app.py
 # НАЗНАЧЕНИЕ: веб-интерфейс для расчета свойств углеводородов
 # ТЕХНОЛОГИИ: Streamlit, Pandas, Matplotlib
 # АВТОР: Группа моделирования технологических процессов, ООО "ИЗП"
 # ============================================================
 
-import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -17,18 +40,6 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
-
-
-# ============================================================
-# ПРОВЕРКА РЕЖИМА ОБСЛУЖИВАНИЯ
-# ============================================================
-
-from config import MAINTENANCE_MODE
-
-if MAINTENANCE_MODE:
-    import maintenance
-    st.stop()
-
 
 # ============================================================
 # БЛОК 1: ИНИЦИАЛИЗАЦИЯ ТЕМЫ
