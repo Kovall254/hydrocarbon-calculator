@@ -98,7 +98,7 @@ with col1:
     st.metric("Температура процессора", "🔥 95°C", "Зашкаливает!")
 
 with col2:
-    st.metric("Осталось до охлаждения", "≈ 15 минут", "Остывает")
+    st.metric("Осталось до охлаждения", "≈ неизвестно", "Остывает")
 
 st.markdown("---")
 st.markdown('<div style="text-align: center; color: #ff6b35; font-size: 18px;">Приносим свои извинения за неудобства!</div>', unsafe_allow_html=True)
