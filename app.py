@@ -643,13 +643,15 @@ with col1:
             'nonane': 0.0, 'decane': 0.0
         }
         
+        # Инициализация компонентов из session_state
+        components_input = {}
+        
         if MOBILE:
             comp_col1, comp_col2 = st.columns(2)
             comp_col3 = None
         else:
             comp_col1, comp_col2, comp_col3 = st.columns(3)
         
-        components_input = {}
         for i, (key, display_name) in enumerate(component_order):
             if i % 3 == 0:
                 col = comp_col1
@@ -658,13 +660,20 @@ with col1:
             else:
                 col = comp_col3 if comp_col3 is not None else comp_col1
             
+            # Читаем значение из session_state, если есть
+            session_key = f"comp_{key}_{input_type}"
+            if session_key in st.session_state:
+                value = st.session_state[session_key]
+            else:
+                value = default_values[key]
+            
             components_input[key] = col.number_input(
                 display_name,
-                value=default_values[key],
+                value=value,
                 min_value=0.0,
                 max_value=100.0,
                 step=0.1,
-                key=f"comp_{key}_{input_type}"
+                key=session_key
             )
         
         st.markdown("---")
@@ -686,6 +695,7 @@ with col1:
                     'nonane': 0.0, 'decane': 0.0
                 }
                 for name, value in example.items():
+                    st.session_state[f"comp_{name}_{input_type}"] = value
                     components_input[name] = value
                 st.rerun()
         
@@ -700,9 +710,10 @@ with col1:
                     fractions = ['hexane', 'heptane', 'octane', 'nonane', 'decane']
                     for i, key in enumerate(fractions):
                         if i < len(normalized_coeffs):
-                            components_input[key] = c6plus_value * normalized_coeffs[i]
+                            st.session_state[f"comp_{key}_{input_type}"] = c6plus_value * normalized_coeffs[i]
                         else:
-                            components_input[key] = 0
+                            st.session_state[f"comp_{key}_{input_type}"] = 0
+                        components_input[key] = st.session_state[f"comp_{key}_{input_type}"]
                     st.rerun()
                 else:
                     st.warning("⚠️ Сначала введите значение C6+")
