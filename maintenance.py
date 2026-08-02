@@ -25,17 +25,6 @@ def get_random_joke():
 def get_random_icon():
     return random.choice(ICONS)
 
-# ПРОВЕРКА: если страница уже настроена, не настраиваем повторно
-if not hasattr(st, '_is_running_with_streamlit'):
-    try:
-        st.set_page_config(
-            page_title="Калькулятор на обслуживании",
-            page_icon="🌡️",
-            layout="centered"
-        )
-    except:
-        pass
-
 # CSS
 st.markdown("""
 <style>
@@ -117,16 +106,13 @@ st.markdown(f"""
 
 # === ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ ===
 st.markdown("---")
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 with col1:
     st.metric("Температура процессора", "🔥 95°C", "Зашкаливает!")
 
 with col2:
-    st.metric("Осталось до охлаждения", "≈ неизвестно", "Остывает")
-
-with col3:
-    st.metric("Количество шуток", f"{len(JOKES)}", "Загружено")
+    st.metric("Осталось до охлаждения", "≈ 15 минут", "Остывает")
 
 st.markdown("---")
 st.markdown('<div style="text-align: center; color: #ff6b35; font-size: 18px;">Приносим свои извинения за неудобства!</div>', unsafe_allow_html=True)
@@ -134,9 +120,7 @@ st.markdown('<div style="text-align: center; color: #ff6b35; font-size: 18px;">�
 st.markdown("---")
 st.markdown('<div class="progress-text">⚡ Программист уже бежит с вёдрами... ⚡</div>', unsafe_allow_html=True)
 
-if st.button("🔄 Показать другую шутку", use_container_width=True):
-    st.rerun()
-
+# === ПОДВАЛ ===
 st.markdown(f"""
 <div class="footer-text">
     © ООО «ИЗП» · Группа моделирования технологических процессов<br>
