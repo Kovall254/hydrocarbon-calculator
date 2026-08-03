@@ -132,7 +132,6 @@ class SHFLUCalculator:
             
             xi = (Tc_mix ** (1/6)) / (MW ** 0.5 * (Pc_mix * 1e6) ** (2/3))
             
-            # Для жидкости используем другую плотность
             if self.phase == 'Жидкость':
                 rho_liquid = self.result.get('rho_liquid') or self.result.get('rho') or 1.0
             else:
@@ -201,7 +200,6 @@ class SHFLUCalculator:
             mu_dynamic = None
             VF = getattr(result, 'VF', None)
             
-            # В зависимости от фазы берем соответствующие свойства
             if self.phase == 'Жидкость':
                 if hasattr(result, 'liquid') and result.liquid is not None:
                     try:
@@ -209,7 +207,6 @@ class SHFLUCalculator:
                         mu_dynamic = result.liquid.mu()
                     except:
                         pass
-                # Если жидкость не получена, пробуем взять газ
                 if mu_dynamic is None and hasattr(result, 'gas') and result.gas is not None:
                     try:
                         rho_gas = result.gas.rho_mass()
@@ -217,14 +214,12 @@ class SHFLUCalculator:
                     except:
                         pass
             else:
-                # Газ
                 if hasattr(result, 'gas') and result.gas is not None:
                     try:
                         rho_gas = result.gas.rho_mass()
                         mu_dynamic = result.gas.mu()
                     except:
                         pass
-                # Если газ не получен, пробуем взять жидкость
                 if mu_dynamic is None and hasattr(result, 'liquid') and result.liquid is not None:
                     try:
                         rho_liquid = result.liquid.rho_mass()
@@ -302,9 +297,6 @@ class SHFLUCalculator:
                     comp_fracs_cp.append(frac)
             
             mixture_str = '&'.join([f"{comp}[{frac}]" for comp, frac in zip(comp_names_cp, comp_fracs_cp)])
-            
-            # Для жидкости указываем Q=0, для газа Q=1
-            Q = 0 if self.phase == 'Жидкость' else 1
             
             rho = PropsSI('D', 'T', self.T, 'P', self.P, mixture_str)
             Z = PropsSI('Z', 'T', self.T, 'P', self.P, mixture_str)
