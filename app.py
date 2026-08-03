@@ -347,14 +347,14 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
     mu_PR_str = f"{mu_PR*1000:.4f}" if mu_PR is not None else "—"
     mu_GERG_str = f"{mu_GERG*1000:.4f}" if mu_GERG is not None else "—"
     
-    rho_PR = result_PR.get('rho_gas') or result_PR.get('rho') or 1.0
+    rho_PR = result_PR.get('rho_gas') or result_PR.get('rho_liquid') or result_PR.get('rho') or 1.0
     rho_GERG = result_GERG.get('rho') or 1.0
     
     nu_PR_str = f"{(mu_PR/rho_PR)*1e6:.4f}" if mu_PR is not None else "—"
     nu_GERG_str = f"{(mu_GERG/rho_GERG)*1e6:.4f}" if mu_GERG is not None else "—"
     
-    rho_PR_str = f"{result_PR['rho_gas']:.3f}" if result_PR.get('rho_gas') else f"{result_PR['rho']:.3f}"
-    rho_GERG_str = f"{result_GERG['rho']:.3f}"
+    rho_PR_str = f"{result_PR['rho_gas']:.3f}" if result_PR.get('rho_gas') else f"{result_PR['rho_liquid']:.3f}" if result_PR.get('rho_liquid') else f"{result_PR['rho']:.3f}" if result_PR.get('rho') else "—"
+    rho_GERG_str = f"{result_GERG['rho']:.3f}" if result_GERG.get('rho') else "—"
     
     diff = abs(result_PR['Z'] - result_GERG['Z']) / result_GERG['Z'] * 100
     type_label = "Массовые" if input_type == "Массовые" else "Мольные"
