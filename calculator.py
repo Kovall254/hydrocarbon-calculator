@@ -91,112 +91,54 @@ class SHFLUCalculator:
         
         return Tc_mix, Pc_mix, omega_mix
     
-    def calculate_viscosity_gas(self):
+    # ============================================================
+    # МЕТОДЫ РАСЧЕТА ВЯЗКОСТИ
+    # ============================================================
+    
+    def calculate_viscosity_liquid_lbc(self):
+        """
+        ВЯЗКОСТЬ ЖИДКОСТИ: МЕТОД ЛЕТУ-УОТСОНА (LBC)
+        Используется для Пенга-Робинсона
+        """
         try:
             MW = self.get_molar_mass()
             Tc_mix, Pc_mix, omega_mix = self.get_critical_params()
             
+            # Параметр xi
             xi = (Tc_mix ** (1/6)) / (MW ** 0.5 * (Pc_mix * 1e6) ** (2/3))
             
-            if self.phase == 'Жидкость':
-                rho_liquid = self.result.get('rho_liquid') or self.result.get('rho') or 1.0
-            else:
-                rho_liquid = self.result.get('rho_gas') or self.result.get('rho') or 1.0
+            # Плотность жидкости (из результата)
+            rho_liquid = self.result.get('rho_liquid') or self.result.get('rho') or 500.0
             
+            # Приведенная плотность
             rho_red = rho_liquid / (MW * Pc_mix / (0.008314 * Tc_mix))
             
-            a1, a2, a3, a4 = 0.1023, 0.023364, 0.058533, -0.040758
-            a5, a6, a7 = 0.0093324, -0.0001556, 0.0000016
+            # Коэффициенты LBC
+            a = [0.1023, 0.023364, 0.058533, -0.040758, 0.0093324, -0.0001556, 0.0000016]
             
             if rho_red > 0:
-                mu_star = (a1 + a2*rho_red + a3*rho_red**2 + a4*rho_red**3 + 
-                          a5*rho_red**4 + a6*rho_red**5 + a7*rho_red**6)
+                mu_star = sum(a[j] * (rho_red ** j) for j in range(7))
             else:
                 mu_star = 0
             
             mu_cP = mu_star * xi
             
+            # Коррекция для тяжелых фракций
             if omega_mix > 0.3:
                 mu_cP *= (1 + 0.5 * (omega_mix - 0.3))
             
-            mu_cP = max(0.001, min(mu_cP, 10))
-            return mu_cP * 0.001
-        except:
+            mu_cP = max(0.001, min(mu_cP, 100))
+            return mu_cP * 0.001  # Па·с
+            
+        except Exception as e:
+            print(f"LBC error: {e}")
             return self.calculate_viscosity_approx()
     
-    def calculate_viscosity_approx(self):
-        MW = self.get_molar_mass()
-        mu_cP = 0.0005 * (MW ** 0.5) * (self.T ** 0.5) / 100
-        mu_cP = max(0.001, min(mu_cP, 10))
-        return mu_cP * 0.001
-    
-    def calculate_PR(self):
-        try:
-            constants, properties = ChemicalConstantsPackage.from_IDs(self.components)
-            kijs = IPDB.get_ip_asymmetric_matrix('ChemSep PR', constants.CASs, 'kij')
-            
-            eos_kwargs = {
-                'Pcs': constants.Pcs, 'Tcs': constants.Tcs,
-                'omegas': constants.omegas, 'kijs': kijs
-            }
-            
-            gas = CEOSGas(PRMIX, eos_kwargs=eos_kwargs,
-                         HeatCapacityGases=properties.HeatCapacityGases)
-            liquid = CEOSLiquid(PRMIX, eos_kwargs=eos_kwargs,
-                               HeatCapacityGases=properties.HeatCapacityGases)
-            
-            flasher = FlashVL(constants, properties, liquid=liquid, gas=gas)
-            result = flasher.flash(T=self.T, P=self.P, zs=self.zs)
-            
-            rho_gas = None
-            rho_liquid = None
-            mu_dynamic = None
-            VF = getattr(result, 'VF', None)
-            
-            if self.phase == 'Жидкость':
-                if hasattr(result, 'liquid') and result.liquid is not None:
-                    try:
-                        rho_liquid = result.liquid.rho_mass()
-                        mu_dynamic = result.liquid.mu()
-                    except:
-                        pass
-                if mu_dynamic is None and hasattr(result, 'gas') and result.gas is not None:
-                    try:
-                        rho_gas = result.gas.rho_mass()
-                        mu_dynamic = result.gas.mu()
-                    except:
-                        pass
-            else:
-                if hasattr(result, 'gas') and result.gas is not None:
-                    try:
-                        rho_gas = result.gas.rho_mass()
-                        mu_dynamic = result.gas.mu()
-                    except:
-                        pass
-                if mu_dynamic is None and hasattr(result, 'liquid') and result.liquid is not None:
-                    try:
-                        rho_liquid = result.liquid.rho_mass()
-                        mu_dynamic = result.liquid.mu()
-                    except:
-                        pass
-            
-            self.result = {
-                'method': 'Пенга-Робинсон',
-                'Z': result.Z(),
-                'rho_gas': rho_gas,
-                'rho_liquid': rho_liquid,
-                'MW': self.get_molar_mass(),
-                'VF': VF,
-                'mu_dynamic': mu_dynamic or self.calculate_viscosity_gas(),
-                'phase': self.phase,
-                'success': True
-            }
-            return self.result
-        except Exception as e:
-            self.result = {'method': 'Пенга-Робинсон', 'error': str(e), 'success': False}
-            return self.result
-    
-    def calculate_GERG(self):
+    def calculate_viscosity_liquid_coolprop(self):
+        """
+        ВЯЗКОСТЬ ЖИДКОСТИ: GERG-2008 через CoolProp
+        Используется для GERG-2008
+        """
         try:
             from CoolProp.CoolProp import PropsSI
             
@@ -221,35 +163,269 @@ class SHFLUCalculator:
             
             mixture_str = '&'.join([f"{comp}[{frac}]" for comp, frac in zip(comp_names_cp, comp_fracs_cp)])
             
+            # Принудительно задаем жидкую фазу для CoolProp
+            # Используем синтаксис с фазой: 'T|liquid'
+            mu = PropsSI('VISCOSITY', 'T|liquid', self.T, 'P', self.P, mixture_str)
+            return mu  # Па·с
+            
+        except Exception as e:
+            print(f"CoolProp liquid viscosity error: {e}")
+            return self.calculate_viscosity_liquid_lbc()
+    
+    def calculate_viscosity_gas_lge(self):
+        """
+        ВЯЗКОСТЬ ГАЗА: МЕТОД ЛИ-ГОНСАЛЕСА-ЭКИНА (LGE)
+        Используется для Пенга-Робинсона
+        """
+        try:
+            MW = self.get_molar_mass()
+            Tc_mix, Pc_mix, omega_mix = self.get_critical_params()
+            
+            # Приведенная температура
+            Tr = self.T / Tc_mix
+            
+            # Вязкость при атмосферном давлении (мкПа·с)
+            if Tr < 1:
+                mu_0 = 0.00001 * (self.T ** 1.5) / (self.T + 100)
+            else:
+                mu_0 = 0.00001 * (self.T ** 1.5) / (self.T + 200)
+            
+            mu_0 *= (1 + 0.5 * omega_mix)
+            
+            # Перевод в Па·с
+            mu_cP = mu_0 * 0.001
+            
+            # Коррекция давления (упрощенная)
+            Pr = self.P / (Pc_mix * 1e6)
+            if Pr > 0:
+                Z = 1 - 0.27 * Pr / (Tr ** 3.5)
+                Z = max(0.5, min(Z, 1.2))
+                rho_r = 0.27 * Pr / (Z * Tr)
+                
+                exp_factor = 1 + 0.5 * Pr / (Tr ** 2.5) * (1 + rho_r + rho_r**2 + rho_r**3)
+                mu_cP *= exp_factor
+            
+            mu_cP = max(0.001, min(mu_cP, 5))
+            return mu_cP * 0.001  # Па·с
+            
+        except Exception as e:
+            print(f"LGE error: {e}")
+            return self.calculate_viscosity_approx()
+    
+    def calculate_viscosity_gas_coolprop(self):
+        """
+        ВЯЗКОСТЬ ГАЗА: GERG-2008 через CoolProp
+        Используется для GERG-2008
+        """
+        try:
+            from CoolProp.CoolProp import PropsSI
+            
+            name_map = {
+                'methane': 'Methane', 'ethane': 'Ethane', 'propane': 'Propane',
+                'nitrogen': 'Nitrogen', 'co2': 'CarbonDioxide',
+                'n-butane': 'n-Butane', 'i-butane': 'isoButane',
+                'n-pentane': 'n-Pentane', 'i-pentane': 'isoPentane',
+                'benzene': 'Benzene', 'toluene': 'Toluene',
+                'hexane': 'n-Hexane', 'heptane': 'n-Heptane',
+                'octane': 'n-Octane', 'nonane': 'n-Nonane', 'decane': 'n-Decane',
+                'helium': 'Helium', 'hydrogen': 'Hydrogen', 'oxygen': 'Oxygen'
+            }
+            
+            comp_names_cp = []
+            comp_fracs_cp = []
+            
+            for name, frac in zip(self.components, self.zs):
+                if frac > 0:
+                    comp_names_cp.append(name_map.get(name, name))
+                    comp_fracs_cp.append(frac)
+            
+            mixture_str = '&'.join([f"{comp}[{frac}]" for comp, frac in zip(comp_names_cp, comp_fracs_cp)])
+            
+            # Принудительно задаем газовую фазу для CoolProp
+            mu = PropsSI('VISCOSITY', 'T|gas', self.T, 'P', self.P, mixture_str)
+            return mu  # Па·с
+            
+        except Exception as e:
+            print(f"CoolProp gas viscosity error: {e}")
+            return self.calculate_viscosity_gas_lge()
+    
+    def calculate_viscosity_approx(self):
+        """Запасной упрощенный расчет вязкости"""
+        MW = self.get_molar_mass()
+        mu_cP = 0.0005 * (MW ** 0.5) * (self.T ** 0.5) / 100
+        mu_cP = max(0.001, min(mu_cP, 10))
+        return mu_cP * 0.001  # Па·с
+    
+    # ============================================================
+    # ОСНОВНЫЕ РАСЧЕТНЫЕ МЕТОДЫ
+    # ============================================================
+    
+    def calculate_PR(self):
+        """Расчет по Пенга-Робинсону"""
+        try:
+            constants, properties = ChemicalConstantsPackage.from_IDs(self.components)
+            kijs = IPDB.get_ip_asymmetric_matrix('ChemSep PR', constants.CASs, 'kij')
+            
+            eos_kwargs = {
+                'Pcs': constants.Pcs, 'Tcs': constants.Tcs,
+                'omegas': constants.omegas, 'kijs': kijs
+            }
+            
+            gas = CEOSGas(PRMIX, eos_kwargs=eos_kwargs,
+                         HeatCapacityGases=properties.HeatCapacityGases)
+            liquid = CEOSLiquid(PRMIX, eos_kwargs=eos_kwargs,
+                               HeatCapacityGases=properties.HeatCapacityGases)
+            
+            flasher = FlashVL(constants, properties, liquid=liquid, gas=gas)
+            result = flasher.flash(T=self.T, P=self.P, zs=self.zs)
+            
+            rho_gas = None
+            rho_liquid = None
+            mu_dynamic = None
+            VF = getattr(result, 'VF', None)
+            
+            # Получаем свойства в зависимости от фазы
+            if self.phase == 'Жидкость':
+                if hasattr(result, 'liquid') and result.liquid is not None:
+                    try:
+                        rho_liquid = result.liquid.rho_mass()
+                        mu_dynamic = result.liquid.mu()
+                    except:
+                        pass
+                # Если жидкость не дала вязкость — используем LBC
+                if mu_dynamic is None:
+                    # Сохраняем результат для LBC
+                    self.result = {
+                        'method': 'Пенга-Робинсон',
+                        'Z': result.Z(),
+                        'rho_gas': rho_gas,
+                        'rho_liquid': rho_liquid,
+                        'MW': self.get_molar_mass(),
+                        'VF': VF,
+                        'phase': self.phase,
+                        'success': True
+                    }
+                    mu_dynamic = self.calculate_viscosity_liquid_lbc()
+            else:
+                # ГАЗ
+                if hasattr(result, 'gas') and result.gas is not None:
+                    try:
+                        rho_gas = result.gas.rho_mass()
+                        mu_dynamic = result.gas.mu()
+                    except:
+                        pass
+                # Если газ не дал вязкость — используем LGE
+                if mu_dynamic is None:
+                    self.result = {
+                        'method': 'Пенга-Робинсон',
+                        'Z': result.Z(),
+                        'rho_gas': rho_gas,
+                        'rho_liquid': rho_liquid,
+                        'MW': self.get_molar_mass(),
+                        'VF': VF,
+                        'phase': self.phase,
+                        'success': True
+                    }
+                    mu_dynamic = self.calculate_viscosity_gas_lge()
+            
+            self.result = {
+                'method': 'Пенга-Робинсон',
+                'Z': result.Z(),
+                'rho_gas': rho_gas,
+                'rho_liquid': rho_liquid,
+                'MW': self.get_molar_mass(),
+                'VF': VF,
+                'mu_dynamic': mu_dynamic,
+                'phase': self.phase,
+                'success': True
+            }
+            return self.result
+            
+        except Exception as e:
+            self.result = {'method': 'Пенга-Робинсон', 'error': str(e), 'success': False}
+            return self.result
+    
+    def calculate_GERG(self):
+        """Расчет по GERG-2008 через CoolProp"""
+        try:
+            from CoolProp.CoolProp import PropsSI
+            
+            name_map = {
+                'methane': 'Methane', 'ethane': 'Ethane', 'propane': 'Propane',
+                'nitrogen': 'Nitrogen', 'co2': 'CarbonDioxide',
+                'n-butane': 'n-Butane', 'i-butane': 'isoButane',
+                'n-pentane': 'n-Pentane', 'i-pentane': 'isoPentane',
+                'benzene': 'Benzene', 'toluene': 'Toluene',
+                'hexane': 'n-Hexane', 'heptane': 'n-Heptane',
+                'octane': 'n-Octane', 'nonane': 'n-Nonane', 'decane': 'n-Decane',
+                'helium': 'Helium', 'hydrogen': 'Hydrogen', 'oxygen': 'Oxygen'
+            }
+            
+            comp_names_cp = []
+            comp_fracs_cp = []
+            
+            for name, frac in zip(self.components, self.zs):
+                if frac > 0:
+                    comp_names_cp.append(name_map.get(name, name))
+                    comp_fracs_cp.append(frac)
+            
+            mixture_str = '&'.join([f"{comp}[{frac}]" for comp, frac in zip(comp_names_cp, comp_fracs_cp)])
+            
+            # Плотность
             rho = PropsSI('D', 'T', self.T, 'P', self.P, mixture_str)
+            
+            # Z-фактор
             Z = PropsSI('Z', 'T', self.T, 'P', self.P, mixture_str)
             
-            try:
-                mu_dynamic = PropsSI('VISCOSITY', 'T', self.T, 'P', self.P, mixture_str)
-            except:
-                mu_dynamic = None
+            # Вязкость в зависимости от фазы
+            if self.phase == 'Жидкость':
+                try:
+                    mu_dynamic = PropsSI('VISCOSITY', 'T|liquid', self.T, 'P', self.P, mixture_str)
+                except:
+                    # Если CoolProp не может дать вязкость жидкости — используем LBC
+                    self.result = {
+                        'method': 'GERG-2008 (CoolProp)',
+                        'Z': Z,
+                        'rho': rho,
+                        'MW': self.get_molar_mass(),
+                        'phase': self.phase,
+                        'success': True
+                    }
+                    mu_dynamic = self.calculate_viscosity_liquid_lbc()
+            else:
+                try:
+                    mu_dynamic = PropsSI('VISCOSITY', 'T|gas', self.T, 'P', self.P, mixture_str)
+                except:
+                    # Если CoolProp не может дать вязкость газа — используем LGE
+                    self.result = {
+                        'method': 'GERG-2008 (CoolProp)',
+                        'Z': Z,
+                        'rho': rho,
+                        'MW': self.get_molar_mass(),
+                        'phase': self.phase,
+                        'success': True
+                    }
+                    mu_dynamic = self.calculate_viscosity_gas_lge()
             
             MW = self.get_molar_mass()
-            
-            if Z is None or Z == 0:
-                Z = 1.0
             
             self.result = {
                 'method': 'GERG-2008 (CoolProp)',
                 'Z': Z,
                 'rho': rho,
-                'mu_dynamic': mu_dynamic or self.calculate_viscosity_gas(),
+                'mu_dynamic': mu_dynamic,
                 'MW': MW,
                 'phase': self.phase,
                 'success': True
             }
             return self.result
+            
         except Exception as e:
             self.result = {
                 'method': 'GERG-2008 (CoolProp)',
                 'Z': 1.0,
                 'rho': None,
-                'mu_dynamic': self.calculate_viscosity_gas(),
+                'mu_dynamic': self.calculate_viscosity_approx(),
                 'MW': self.get_molar_mass(),
                 'phase': self.phase,
                 'success': True,
@@ -271,7 +447,10 @@ class SHFLUCalculator:
         
         mu = self.result.get('mu_dynamic')
         if mu is None:
-            mu = self.calculate_viscosity_gas()
+            if self.phase == 'Жидкость':
+                mu = self.calculate_viscosity_liquid_lbc()
+            else:
+                mu = self.calculate_viscosity_gas_lge()
             self.result['mu_dynamic'] = mu
         
         mu_cP = mu * 1000
@@ -320,14 +499,49 @@ class SHFLUCalculator:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("КАЛЬКУЛЯТОР СВОЙСТВ УГЛЕВОДОРОДОВ (ТЕСТ)")
+    print("ТЕСТ РАСЧЕТА ВЯЗКОСТЕЙ")
     print("=" * 60)
     
-    calc = SHFLUCalculator(method='PR', phase='Газ')
-    calc.set_composition(
-        components=['methane', 'ethane', 'propane', 'nitrogen'],
-        zs=[0.00, 0.00, 0.00, 0.00]
+    # Тест 1: ЖИДКОСТЬ через Пенга-Робинсон (LBC)
+    print("\n🔬 Тест 1: Жидкость (Пенга-Робинсон / LBC)")
+    calc1 = SHFLUCalculator(method='PR', phase='Жидкость')
+    calc1.set_composition(
+        components=['methane', 'ethane', 'propane', 'n-butane', 'hexane'],
+        zs=[0.30, 0.20, 0.20, 0.15, 0.15]
     )
-    calc.set_conditions(T_C=35, P_MPa=2.5)
-    calc.calculate()
-    calc.print_result()
+    calc1.set_conditions(T_C=25, P_MPa=0.5)
+    calc1.calculate()
+    calc1.print_result()
+    
+    # Тест 2: ЖИДКОСТЬ через GERG-2008 (CoolProp)
+    print("\n🔬 Тест 2: Жидкость (GERG-2008 / CoolProp)")
+    calc2 = SHFLUCalculator(method='GERG', phase='Жидкость')
+    calc2.set_composition(
+        components=['methane', 'ethane', 'propane', 'n-butane', 'hexane'],
+        zs=[0.30, 0.20, 0.20, 0.15, 0.15]
+    )
+    calc2.set_conditions(T_C=25, P_MPa=0.5)
+    calc2.calculate()
+    calc2.print_result()
+    
+    # Тест 3: ГАЗ через Пенга-Робинсон (LGE)
+    print("\n🔬 Тест 3: Газ (Пенга-Робинсон / LGE)")
+    calc3 = SHFLUCalculator(method='PR', phase='Газ')
+    calc3.set_composition(
+        components=['methane', 'ethane', 'propane', 'nitrogen'],
+        zs=[0.80, 0.12, 0.05, 0.03]
+    )
+    calc3.set_conditions(T_C=35, P_MPa=2.5)
+    calc3.calculate()
+    calc3.print_result()
+    
+    # Тест 4: ГАЗ через GERG-2008 (CoolProp)
+    print("\n🔬 Тест 4: Газ (GERG-2008 / CoolProp)")
+    calc4 = SHFLUCalculator(method='GERG', phase='Газ')
+    calc4.set_composition(
+        components=['methane', 'ethane', 'propane', 'nitrogen'],
+        zs=[0.80, 0.12, 0.05, 0.03]
+    )
+    calc4.set_conditions(T_C=35, P_MPa=2.5)
+    calc4.calculate()
+    calc4.print_result()
