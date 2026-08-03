@@ -1,6 +1,7 @@
 # ============================================================
 # МОДУЛЬ: app.py (ОСНОВНОЙ КАЛЬКУЛЯТОР)
 # ============================================================
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -201,7 +202,6 @@ def get_theme_css():
 
 st.markdown(f"<style>{get_theme_css()}</style>", unsafe_allow_html=True)
 
-# Фон с шестиугольниками
 st.markdown("""
 <div class="hex-bg">
     <div class="hex" style="top:5%; left:3%; transform:rotate(15deg);">⬡</div>
