@@ -319,7 +319,7 @@ def normalize_composition(components):
     return components
 
 def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
-                   user_name, user_workshop, user_sensor, input_type, components_mass):
+                   user_name, user_workshop, user_sensor, input_type, phase_type, components_mass):
     """Формирует текстовый протокол"""
     
     display_names = {
@@ -373,6 +373,7 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
 │  Фамилия И.О.:     {user_name:<40} │
 │  Цех:              {user_workshop:<40} │
 │  Датчик:           {user_sensor:<40} │
+│  Фаза:             {phase_type:<44}                                      │
 │  Дата расчета:     {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}                    │
 │  Тип долей:        {type_label:<44}                                      │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -490,17 +491,19 @@ SESSION_KEYS = [
     'logged_in', 'user_name', 'user_workshop', 'show_report',
     'result_PR', 'result_GERG', 'T_C', 'P_MPa', 'method',
     'components', 'input_type', 'user_sensor', 'quote_shown',
-    'report_filename', 'report_text', 'components_input'
+    'report_filename', 'report_text', 'components_input', 'phase_type'
 ]
 
 for key in SESSION_KEYS:
     if key not in st.session_state:
         if key == 'logged_in':
             st.session_state.logged_in = False
-        elif key in ['user_name', 'user_workshop', 'user_sensor', 'method', 'input_type']:
+        elif key in ['user_name', 'user_workshop', 'user_sensor', 'method', 'input_type', 'phase_type']:
             st.session_state[key] = '' if key in ['user_name', 'user_workshop', 'user_sensor'] else 'Сравнение методов'
             if key == 'input_type':
                 st.session_state.input_type = 'Мольные'
+            if key == 'phase_type':
+                st.session_state.phase_type = 'Газ'
         elif key in ['result_PR', 'result_GERG', 'T_C', 'P_MPa']:
             st.session_state[key] = None
         elif key in ['components', 'components_input']:
@@ -600,6 +603,15 @@ with col1:
     with st.expander("Условия расчета", expanded=True):
         T_C = st.number_input("Температура (°C)", value=35.0, min_value=-50.0, max_value=150.0, step=1.0)
         P_MPa = st.number_input("Давление (МПа)", value=2.5, min_value=0.001, max_value=10.0, step=0.1)
+        
+        # --- ВЫБОР ФАЗЫ ---
+        phase_type = st.radio(
+            "Фаза:",
+            ["Газ", "Жидкость"],
+            index=0 if st.session_state.phase_type == "Газ" else 1,
+            help="Выберите агрегатное состояние смеси"
+        )
+        st.session_state.phase_type = phase_type
     
     with st.expander("Метод расчета", expanded=True):
         method = st.selectbox("Выберите метод:", ["Пенга-Робинсон", "GERG-2008", "Сравнение методов"])
@@ -787,12 +799,13 @@ with col1:
         try:
             st.session_state.input_type = input_type
             
-            calc_PR = SHFLUCalculator(method='PR')
+            # ---- ПЕРЕДАЕМ ФАЗУ В КАЛЬКУЛЯТОР ----
+            calc_PR = SHFLUCalculator(method='PR', phase=phase_type)
             calc_PR.set_composition(comp_names, zs)
             calc_PR.set_conditions(T_C, P_MPa)
             result_PR = calc_PR.calculate()
             
-            calc_GERG = SHFLUCalculator(method='GERG')
+            calc_GERG = SHFLUCalculator(method='GERG', phase=phase_type)
             calc_GERG.set_composition(comp_names, zs)
             calc_GERG.set_conditions(T_C, P_MPa)
             result_GERG = calc_GERG.calculate()
@@ -818,7 +831,9 @@ with col1:
                 st.session_state.user_name,
                 st.session_state.user_workshop,
                 st.session_state.user_sensor,
-                input_type, components_input
+                input_type,
+                phase_type,
+                components_input
             )
             
             with open(filename, 'w', encoding='utf-8') as f:
@@ -864,19 +879,20 @@ if col2 is not None:
             result_GERG = st.session_state.result_GERG
             method = st.session_state.method
             input_type = st.session_state.get('input_type', 'Мольные')
+            phase_type = st.session_state.get('phase_type', 'Газ')
             
             if method == "Пенга-Робинсон":
                 result = result_PR
-                st.info("📘 Метод: Пенга-Робинсон")
+                st.info(f"📘 Метод: Пенга-Робинсон ({phase_type})")
             elif method == "GERG-2008":
                 result = result_GERG
-                st.info("📗 Метод: GERG-2008")
+                st.info(f"📗 Метод: GERG-2008 ({phase_type})")
             else:
                 result = None
                 st.info("📊 Сравнение методов")
             
             type_label = "Массовые" if input_type == "Массовые" else "Мольные"
-            st.caption(f"Тип долей: {type_label}")
+            st.caption(f"Тип долей: {type_label} | Фаза: {phase_type}")
             
             with st.expander("Основные параметры", expanded=True):
                 if MOBILE:
@@ -901,9 +917,9 @@ if col2 is not None:
                     
                     with col_rho:
                         if result.get('rho_gas') is not None:
-                            st.metric("Плотность", f"{result['rho_gas']:.3f} кг/м³")
+                            st.metric("Плотность (газ)", f"{result['rho_gas']:.3f} кг/м³")
                         elif result.get('rho_liquid') is not None:
-                            st.metric("Плотность", f"{result['rho_liquid']:.3f} кг/м³")
+                            st.metric("Плотность (жидк)", f"{result['rho_liquid']:.3f} кг/м³")
                         elif result.get('rho') is not None:
                             st.metric("Плотность", f"{result['rho']:.3f} кг/м³")
                         else:
@@ -947,6 +963,7 @@ if col2 is not None:
                 st.text(f"ФИО: {st.session_state.user_name}")
                 st.text(f"Цех: {st.session_state.user_workshop}")
                 st.text(f"Датчик: {st.session_state.user_sensor}")
+                st.text(f"Фаза: {phase_type}")
                 st.text(f"Дата: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
             
             col_btn1, col_btn2 = st.columns(2)

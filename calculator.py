@@ -12,8 +12,13 @@ import math
 class SHFLUCalculator:
     """Калькулятор свойств газовых смесей"""
     
-    def __init__(self, method='PR'):
+    def __init__(self, method='PR', phase='Газ'):
+        """
+        method: 'PR' - Пенга-Робинсон, 'GERG' - GERG-2008
+        phase: 'Газ' или 'Жидкость'
+        """
         self.method = method
+        self.phase = phase
         self.components = []
         self.zs = []
         self.T = None
@@ -127,7 +132,12 @@ class SHFLUCalculator:
             
             xi = (Tc_mix ** (1/6)) / (MW ** 0.5 * (Pc_mix * 1e6) ** (2/3))
             
-            rho_liquid = self.result.get('rho_gas') or 1.0
+            # Для жидкости используем другую плотность
+            if self.phase == 'Жидкость':
+                rho_liquid = self.result.get('rho_liquid') or self.result.get('rho') or 1.0
+            else:
+                rho_liquid = self.result.get('rho_gas') or self.result.get('rho') or 1.0
+            
             rho_red = rho_liquid / (MW * Pc_mix / (0.008314 * Tc_mix))
             
             a1, a2, a3, a4 = 0.1023, 0.023364, 0.058533, -0.040758
@@ -189,27 +199,38 @@ class SHFLUCalculator:
             rho_gas = None
             rho_liquid = None
             mu_dynamic = None
+            VF = getattr(result, 'VF', None)
             
-            if hasattr(result, 'gas') and result.gas is not None:
-                try:
-                    rho_gas = result.gas.rho_mass()
-                except:
-                    pass
-            
-            if hasattr(result, 'liquid') and result.liquid is not None:
-                try:
-                    rho_liquid = result.liquid.rho_mass()
-                except:
-                    pass
-            
-            try:
-                if hasattr(result, 'gas') and result.gas is not None:
+            # В зависимости от фазы берем соответствующие свойства
+            if self.phase == 'Жидкость':
+                if hasattr(result, 'liquid') and result.liquid is not None:
                     try:
+                        rho_liquid = result.liquid.rho_mass()
+                        mu_dynamic = result.liquid.mu()
+                    except:
+                        pass
+                # Если жидкость не получена, пробуем взять газ
+                if mu_dynamic is None and hasattr(result, 'gas') and result.gas is not None:
+                    try:
+                        rho_gas = result.gas.rho_mass()
                         mu_dynamic = result.gas.mu()
                     except:
                         pass
-            except:
-                pass
+            else:
+                # Газ
+                if hasattr(result, 'gas') and result.gas is not None:
+                    try:
+                        rho_gas = result.gas.rho_mass()
+                        mu_dynamic = result.gas.mu()
+                    except:
+                        pass
+                # Если газ не получен, пробуем взять жидкость
+                if mu_dynamic is None and hasattr(result, 'liquid') and result.liquid is not None:
+                    try:
+                        rho_liquid = result.liquid.rho_mass()
+                        mu_dynamic = result.liquid.mu()
+                    except:
+                        pass
             
             if mu_dynamic is None:
                 self.result = {
@@ -218,8 +239,9 @@ class SHFLUCalculator:
                     'rho_gas': rho_gas,
                     'rho_liquid': rho_liquid,
                     'MW': self.get_molar_mass(),
-                    'VF': getattr(result, 'VF', None),
+                    'VF': VF,
                     'mu_dynamic': None,
+                    'phase': self.phase,
                     'success': True
                 }
                 mu_dynamic = self.calculate_viscosity_gas()
@@ -230,8 +252,9 @@ class SHFLUCalculator:
                 'rho_gas': rho_gas,
                 'rho_liquid': rho_liquid,
                 'MW': self.get_molar_mass(),
-                'VF': getattr(result, 'VF', None),
+                'VF': VF,
                 'mu_dynamic': mu_dynamic,
+                'phase': self.phase,
                 'success': True
             }
             return self.result
@@ -280,6 +303,9 @@ class SHFLUCalculator:
             
             mixture_str = '&'.join([f"{comp}[{frac}]" for comp, frac in zip(comp_names_cp, comp_fracs_cp)])
             
+            # Для жидкости указываем Q=0, для газа Q=1
+            Q = 0 if self.phase == 'Жидкость' else 1
+            
             rho = PropsSI('D', 'T', self.T, 'P', self.P, mixture_str)
             Z = PropsSI('Z', 'T', self.T, 'P', self.P, mixture_str)
             
@@ -297,6 +323,7 @@ class SHFLUCalculator:
                     'rho': rho,
                     'mu_dynamic': None,
                     'MW': MW,
+                    'phase': self.phase,
                     'success': True
                 }
                 mu_dynamic = self.calculate_viscosity_gas()
@@ -307,6 +334,7 @@ class SHFLUCalculator:
                 'rho': rho,
                 'mu_dynamic': mu_dynamic,
                 'MW': MW,
+                'phase': self.phase,
                 'success': True
             }
             return self.result
@@ -341,7 +369,7 @@ class SHFLUCalculator:
             return None, None
         
         mu_cP = mu * 1000
-        rho = self.result.get('rho_gas') or self.result.get('rho') or 1.0
+        rho = self.result.get('rho_gas') or self.result.get('rho_liquid') or self.result.get('rho') or 1.0
         nu_cSt = (mu / rho) * 1e6
         
         return mu_cP, nu_cSt
@@ -356,6 +384,7 @@ class SHFLUCalculator:
         print("=" * 60)
         print(f"Температура:        {self.T - 273.15:.1f} °C")
         print(f"Давление:           {self.P/1e6:.3f} МПа")
+        print(f"Фаза:               {self.phase}")
         print(f"\nСостав смеси:")
         for name, frac in zip(self.components, self.zs):
             print(f"  {name:12} {frac*100:5.1f} %")
@@ -363,24 +392,15 @@ class SHFLUCalculator:
         print(f"\nРезультаты:")
         print(f"  Z-фактор:         {self.result['Z']:.6f}")
         
-        if self.method == 'PR':
-            if self.result.get('rho_gas') is not None:
-                print(f"  Плотность (газ):  {self.result['rho_gas']:.3f} кг/м³")
-            else:
-                print(f"  Плотность (газ):  —")
-            
-            if self.result.get('rho_liquid') is not None:
-                print(f"  Плотность (жидк): {self.result['rho_liquid']:.3f} кг/м³")
-            else:
-                print(f"  Плотность (жидк): —")
-            
-            if self.result.get('VF') is not None:
-                print(f"  Доля газа (об.):  {self.result['VF']*100:.2f} %")
-        else:
-            if self.result.get('rho') is not None:
-                print(f"  Плотность:        {self.result['rho']:.3f} кг/м³")
-            else:
-                print(f"  Плотность:        —")
+        if self.result.get('rho_gas') is not None:
+            print(f"  Плотность (газ):  {self.result['rho_gas']:.3f} кг/м³")
+        if self.result.get('rho_liquid') is not None:
+            print(f"  Плотность (жидк): {self.result['rho_liquid']:.3f} кг/м³")
+        if self.result.get('rho') is not None and self.result.get('rho_gas') is None and self.result.get('rho_liquid') is None:
+            print(f"  Плотность:        {self.result['rho']:.3f} кг/м³")
+        
+        if self.result.get('VF') is not None:
+            print(f"  Доля газа (об.):  {self.result['VF']*100:.2f} %")
         
         mu_cP, nu_cSt = self.get_viscosity()
         if mu_cP is not None:
@@ -399,14 +419,24 @@ if __name__ == "__main__":
     print("КАЛЬКУЛЯТОР СВОЙСТВ УГЛЕВОДОРОДОВ (ТЕСТ)")
     print("=" * 60)
     
-    calc = SHFLUCalculator(method='PR')
-    
+    # Тест для газа
+    calc = SHFLUCalculator(method='PR', phase='Газ')
     calc.set_composition(
         components=['methane', 'ethane', 'propane', 'nitrogen', 'benzene', 'toluene'],
         zs=[0.70, 0.10, 0.05, 0.03, 0.07, 0.05]
     )
-    
     calc.set_conditions(T_C=35, P_MPa=2.5)
-    
     calc.calculate()
     calc.print_result()
+    
+    print("\n" + "=" * 60)
+    
+    # Тест для жидкости
+    calc_liq = SHFLUCalculator(method='PR', phase='Жидкость')
+    calc_liq.set_composition(
+        components=['methane', 'ethane', 'propane', 'n-butane', 'hexane'],
+        zs=[0.30, 0.20, 0.20, 0.15, 0.15]
+    )
+    calc_liq.set_conditions(T_C=25, P_MPa=0.5)
+    calc_liq.calculate()
+    calc_liq.print_result()
