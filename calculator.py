@@ -91,7 +91,7 @@ class SHFLUCalculator:
         return Tc_mix, Pc_mix, omega_mix
     
     # ============================================================
-    # 1. ВЯЗКОСТЬ: LBC (ЖИДКОСТЬ)
+    # ВЯЗКОСТЬ ЖИДКОСТИ: LBC (Лету-Уотсона)
     # ============================================================
     
     def calculate_viscosity_liquid_lbc(self):
@@ -123,7 +123,7 @@ class SHFLUCalculator:
             return self.calculate_viscosity_approx()
     
     # ============================================================
-    # 2. ВЯЗКОСТЬ: LGE (ГАЗ)
+    # ВЯЗКОСТЬ ГАЗА: LGE (Ли-Гонсалеса-Экина)
     # ============================================================
     
     def calculate_viscosity_gas_lge(self):
@@ -156,7 +156,7 @@ class SHFLUCalculator:
             return self.calculate_viscosity_approx()
     
     # ============================================================
-    # 3. ВЯЗКОСТЬ: УНИВЕРСАЛЬНАЯ КОРРЕЛЯЦИЯ (ЗАПАСНАЯ)
+    # ЗАПАСНОЙ РАСЧЕТ ВЯЗКОСТИ
     # ============================================================
     
     def calculate_viscosity_approx(self):
@@ -166,7 +166,7 @@ class SHFLUCalculator:
         return mu_cP * 0.001
     
     # ============================================================
-    # 4. ПЛОТНОСТЬ
+    # ПЛОТНОСТЬ
     # ============================================================
     
     def calculate_density_ideal_gas(self):
@@ -183,7 +183,7 @@ class SHFLUCalculator:
             return self.calculate_density_ideal_gas()
     
     # ============================================================
-    # 5. РАСЧЕТ ПО ПЕНГА-РОБИНСОНУ
+    # РАСЧЕТ ПО ПЕНГА-РОБИНСОНУ (ВЯЗКОСТЬ — ПРИНУДИТЕЛЬНАЯ)
     # ============================================================
     
     def calculate_PR(self):
@@ -231,33 +231,12 @@ class SHFLUCalculator:
             if rho_liquid is not None and (rho_liquid < 0.01 or rho_liquid > 2000):
                 rho_liquid = self.calculate_density_ideal_gas()
             
-            # --- ВЯЗКОСТЬ (ОСНОВНАЯ) ---
-            mu_dynamic = None
-            
-            # Сначала пытаемся получить из thermo
+            # --- ВЯЗКОСТЬ: ПРИНУДИТЕЛЬНЫЙ РАСЧЕТ (НЕ ИСПОЛЬЗУЕМ .mu()) ---
+            # Всегда считаем через LBC (жидкость) или LGE (газ)
             if self.phase == 'Жидкость':
-                if hasattr(result, 'liquid') and result.liquid is not None:
-                    try:
-                        mu_dynamic = result.liquid.mu()
-                    except:
-                        pass
+                mu_dynamic = self.calculate_viscosity_liquid_lbc()
             else:
-                if hasattr(result, 'gas') and result.gas is not None:
-                    try:
-                        mu_dynamic = result.gas.mu()
-                    except:
-                        pass
-            
-            # --- ВЯЗКОСТЬ: ЛУЧШИЙ МЕТОД В ЗАВИСИМОСТИ ОТ ФАЗЫ ---
-            if mu_dynamic is None:
-                if self.phase == 'Жидкость':
-                    mu_dynamic = self.calculate_viscosity_liquid_lbc()
-                else:
-                    mu_dynamic = self.calculate_viscosity_gas_lge()
-            
-            # --- ЕСЛИ ВСЁ ПРОВАЛИЛОСЬ ---
-            if mu_dynamic is None or mu_dynamic <= 0:
-                mu_dynamic = self.calculate_viscosity_approx()
+                mu_dynamic = self.calculate_viscosity_gas_lge()
             
             self.result = {
                 'method': 'Пенга-Робинсон',
@@ -292,7 +271,7 @@ class SHFLUCalculator:
             return self.result
     
     # ============================================================
-    # 6. РАСЧЕТ ПО GERG-2008
+    # РАСЧЕТ ПО GERG-2008
     # ============================================================
     
     def calculate_GERG(self):
@@ -428,11 +407,11 @@ class SHFLUCalculator:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("ТЕСТ: ВЯЗКОСТЬ ПР vs GERG")
+    print("ТЕСТ: ВЯЗКОСТЬ ПР (ПРИНУДИТЕЛЬНАЯ)")
     print("=" * 60)
     
     # Тест: Газ C2-C5
-    print("\n🔬 Тест: Газ C2-C5 — Пенга-Робинсон")
+    print("\n🔬 Тест: Газ C2-C5 — Пенга-Робинсон (принудительная вязкость)")
     calc1 = SHFLUCalculator(method='PR', phase='Газ')
     calc1.set_composition(
         components=['ethane', 'propane', 'n-butane', 'n-pentane'],
@@ -441,13 +420,3 @@ if __name__ == "__main__":
     calc1.set_conditions(T_C=35, P_MPa=2.5)
     calc1.calculate()
     calc1.print_result()
-    
-    print("\n🔬 Тест: Газ C2-C5 — GERG-2008")
-    calc2 = SHFLUCalculator(method='GERG', phase='Газ')
-    calc2.set_composition(
-        components=['ethane', 'propane', 'n-butane', 'n-pentane'],
-        zs=[0.40, 0.30, 0.20, 0.10]
-    )
-    calc2.set_conditions(T_C=35, P_MPa=2.5)
-    calc2.calculate()
-    calc2.print_result()
