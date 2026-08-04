@@ -1,7 +1,6 @@
 """
 calculator.py - Ядро расчетов свойств углеводородов
 Методы: Пенга-Робинсон, GERG-2008 (CoolProp)
-Поддерживаемые компоненты: He, H2, O2, N2, CO2, C1-C10, бензол, толуол
 """
 
 from thermo import ChemicalConstantsPackage, PRMIX, CEOSGas, CEOSLiquid, FlashVL
@@ -92,7 +91,7 @@ class SHFLUCalculator:
         return Tc_mix, Pc_mix, omega_mix
     
     # ============================================================
-    # 1. ВЯЗКОСТЬ ЖИДКОСТИ: МЕТОД ЛЕТУ-УОТСОНА (LBC)
+    # 1. ВЯЗКОСТЬ: LBC (ЖИДКОСТЬ)
     # ============================================================
     
     def calculate_viscosity_liquid_lbc(self):
@@ -124,7 +123,7 @@ class SHFLUCalculator:
             return self.calculate_viscosity_approx()
     
     # ============================================================
-    # 2. ВЯЗКОСТЬ ГАЗА: МЕТОД ЛИ-ГОНСАЛЕСА-ЭКИНА (LGE)
+    # 2. ВЯЗКОСТЬ: LGE (ГАЗ)
     # ============================================================
     
     def calculate_viscosity_gas_lge(self):
@@ -157,7 +156,7 @@ class SHFLUCalculator:
             return self.calculate_viscosity_approx()
     
     # ============================================================
-    # 3. ЗАПАСНОЙ РАСЧЕТ ВЯЗКОСТИ
+    # 3. ВЯЗКОСТЬ: УНИВЕРСАЛЬНАЯ КОРРЕЛЯЦИЯ (ЗАПАСНАЯ)
     # ============================================================
     
     def calculate_viscosity_approx(self):
@@ -167,7 +166,7 @@ class SHFLUCalculator:
         return mu_cP * 0.001
     
     # ============================================================
-    # 4. ПЛОТНОСТЬ: ИДЕАЛЬНЫЙ ГАЗ (ЗАПАСНОЙ)
+    # 4. ПЛОТНОСТЬ
     # ============================================================
     
     def calculate_density_ideal_gas(self):
@@ -184,7 +183,7 @@ class SHFLUCalculator:
             return self.calculate_density_ideal_gas()
     
     # ============================================================
-    # 5. РАСЧЕТ ПО ПЕНГА-РОБИНСОНУ (УЛУЧШЕННЫЙ)
+    # 5. РАСЧЕТ ПО ПЕНГА-РОБИНСОНУ
     # ============================================================
     
     def calculate_PR(self):
@@ -224,37 +223,42 @@ class SHFLUCalculator:
                 except:
                     pass
             
-            # Если плотность не получена — через Z
             if rho_gas is None and rho_liquid is None:
                 rho_gas = self.calculate_density_from_Z(Z)
             
-            # Если плотность нереалистична — идеальный газ
             if rho_gas is not None and (rho_gas < 0.01 or rho_gas > 1000):
                 rho_gas = self.calculate_density_ideal_gas()
             if rho_liquid is not None and (rho_liquid < 0.01 or rho_liquid > 2000):
                 rho_liquid = self.calculate_density_ideal_gas()
             
-            # --- ВЯЗКОСТЬ ---
+            # --- ВЯЗКОСТЬ (ОСНОВНАЯ) ---
             mu_dynamic = None
             
+            # Сначала пытаемся получить из thermo
             if self.phase == 'Жидкость':
                 if hasattr(result, 'liquid') and result.liquid is not None:
                     try:
                         mu_dynamic = result.liquid.mu()
                     except:
                         pass
-                if mu_dynamic is None:
-                    mu_dynamic = self.calculate_viscosity_liquid_lbc()
             else:
                 if hasattr(result, 'gas') and result.gas is not None:
                     try:
                         mu_dynamic = result.gas.mu()
                     except:
                         pass
-                if mu_dynamic is None:
+            
+            # --- ВЯЗКОСТЬ: ЛУЧШИЙ МЕТОД В ЗАВИСИМОСТИ ОТ ФАЗЫ ---
+            if mu_dynamic is None:
+                if self.phase == 'Жидкость':
+                    mu_dynamic = self.calculate_viscosity_liquid_lbc()
+                else:
                     mu_dynamic = self.calculate_viscosity_gas_lge()
             
-            # --- ФОРМИРУЕМ РЕЗУЛЬТАТ ---
+            # --- ЕСЛИ ВСЁ ПРОВАЛИЛОСЬ ---
+            if mu_dynamic is None or mu_dynamic <= 0:
+                mu_dynamic = self.calculate_viscosity_approx()
+            
             self.result = {
                 'method': 'Пенга-Робинсон',
                 'Z': Z,
@@ -424,11 +428,11 @@ class SHFLUCalculator:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("ТЕСТ: СРАВНЕНИЕ PR И GERG")
+    print("ТЕСТ: ВЯЗКОСТЬ ПР vs GERG")
     print("=" * 60)
     
-    # Тест 1: Газ (C2-C5)
-    print("\n🔬 Тест 1: Газ (C2-C5) — Пенга-Робинсон")
+    # Тест: Газ C2-C5
+    print("\n🔬 Тест: Газ C2-C5 — Пенга-Робинсон")
     calc1 = SHFLUCalculator(method='PR', phase='Газ')
     calc1.set_composition(
         components=['ethane', 'propane', 'n-butane', 'n-pentane'],
@@ -438,7 +442,7 @@ if __name__ == "__main__":
     calc1.calculate()
     calc1.print_result()
     
-    print("\n🔬 Тест 2: Газ (C2-C5) — GERG-2008")
+    print("\n🔬 Тест: Газ C2-C5 — GERG-2008")
     calc2 = SHFLUCalculator(method='GERG', phase='Газ')
     calc2.set_composition(
         components=['ethane', 'propane', 'n-butane', 'n-pentane'],
