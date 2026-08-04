@@ -91,7 +91,7 @@ class SHFLUCalculator:
         return Tc_mix, Pc_mix, omega_mix
     
     # ============================================================
-    # ВЯЗКОСТЬ ЖИДКОСТИ: LBC (Лету-Уотсона)
+    # 1. ВЯЗКОСТЬ ЖИДКОСТИ: LBC (ЗАПАСНОЙ)
     # ============================================================
     
     def calculate_viscosity_liquid_lbc(self):
@@ -123,7 +123,7 @@ class SHFLUCalculator:
             return self.calculate_viscosity_approx()
     
     # ============================================================
-    # ВЯЗКОСТЬ ГАЗА: LGE (Ли-Гонсалеса-Экина)
+    # 2. ВЯЗКОСТЬ ГАЗА: LGE
     # ============================================================
     
     def calculate_viscosity_gas_lge(self):
@@ -156,7 +156,7 @@ class SHFLUCalculator:
             return self.calculate_viscosity_approx()
     
     # ============================================================
-    # ЗАПАСНОЙ РАСЧЕТ ВЯЗКОСТИ
+    # 3. ЗАПАСНОЙ РАСЧЕТ ВЯЗКОСТИ
     # ============================================================
     
     def calculate_viscosity_approx(self):
@@ -166,7 +166,7 @@ class SHFLUCalculator:
         return mu_cP * 0.001
     
     # ============================================================
-    # ПЛОТНОСТЬ
+    # 4. ПЛОТНОСТЬ
     # ============================================================
     
     def calculate_density_ideal_gas(self):
@@ -183,7 +183,7 @@ class SHFLUCalculator:
             return self.calculate_density_ideal_gas()
     
     # ============================================================
-    # РАСЧЕТ ПО ПЕНГА-РОБИНСОНУ (ВЯЗКОСТЬ — ПРИНУДИТЕЛЬНАЯ)
+    # 5. РАСЧЕТ ПО ПЕНГА-РОБИНСОНУ (ЖИДКОСТЬ → GERG)
     # ============================================================
     
     def calculate_PR(self):
@@ -231,12 +231,43 @@ class SHFLUCalculator:
             if rho_liquid is not None and (rho_liquid < 0.01 or rho_liquid > 2000):
                 rho_liquid = self.calculate_density_ideal_gas()
             
-            # --- ВЯЗКОСТЬ: ПРИНУДИТЕЛЬНЫЙ РАСЧЕТ (НЕ ИСПОЛЬЗУЕМ .mu()) ---
-            # Всегда считаем через LBC (жидкость) или LGE (газ)
+            # --- ВЯЗКОСТЬ ---
+            mu_dynamic = None
+            
             if self.phase == 'Жидкость':
-                mu_dynamic = self.calculate_viscosity_liquid_lbc()
+                # Для жидкости — используем GERG-2008 через CoolProp
+                try:
+                    from CoolProp.CoolProp import PropsSI
+                    
+                    name_map = {
+                        'methane': 'Methane', 'ethane': 'Ethane', 'propane': 'Propane',
+                        'nitrogen': 'Nitrogen', 'co2': 'CarbonDioxide',
+                        'n-butane': 'n-Butane', 'i-butane': 'isoButane',
+                        'n-pentane': 'n-Pentane', 'i-pentane': 'isoPentane',
+                        'benzene': 'Benzene', 'toluene': 'Toluene',
+                        'hexane': 'n-Hexane', 'heptane': 'n-Heptane',
+                        'octane': 'n-Octane', 'nonane': 'n-Nonane', 'decane': 'n-Decane',
+                        'helium': 'Helium', 'hydrogen': 'Hydrogen', 'oxygen': 'Oxygen'
+                    }
+                    
+                    comp_names_cp = []
+                    comp_fracs_cp = []
+                    for name, frac in zip(self.components, self.zs):
+                        if frac > 0:
+                            comp_names_cp.append(name_map.get(name, name))
+                            comp_fracs_cp.append(frac)
+                    mixture_str = '&'.join([f"{comp}[{frac}]" for comp, frac in zip(comp_names_cp, comp_fracs_cp)])
+                    
+                    mu_dynamic = PropsSI('VISCOSITY', 'T|liquid', self.T, 'P', self.P, mixture_str)
+                except:
+                    # Если CoolProp не сработал — LBC
+                    mu_dynamic = self.calculate_viscosity_liquid_lbc()
             else:
+                # Для газа — LGE
                 mu_dynamic = self.calculate_viscosity_gas_lge()
+            
+            if mu_dynamic is None or mu_dynamic <= 0:
+                mu_dynamic = self.calculate_viscosity_approx()
             
             self.result = {
                 'method': 'Пенга-Робинсон',
@@ -271,7 +302,7 @@ class SHFLUCalculator:
             return self.result
     
     # ============================================================
-    # РАСЧЕТ ПО GERG-2008
+    # 6. РАСЧЕТ ПО GERG-2008
     # ============================================================
     
     def calculate_GERG(self):
@@ -407,16 +438,16 @@ class SHFLUCalculator:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("ТЕСТ: ВЯЗКОСТЬ ПР (ПРИНУДИТЕЛЬНАЯ)")
+    print("ТЕСТ: ПР (ЖИДКОСТЬ → GERG)")
     print("=" * 60)
     
-    # Тест: Газ C2-C5
-    print("\n🔬 Тест: Газ C2-C5 — Пенга-Робинсон (принудительная вязкость)")
-    calc1 = SHFLUCalculator(method='PR', phase='Газ')
+    # Жидкость через ПР (вязкость через GERG)
+    print("\n🔬 Тест: Жидкость C2-C5 — Пенга-Робинсон (вязкость через GERG)")
+    calc1 = SHFLUCalculator(method='PR', phase='Жидкость')
     calc1.set_composition(
         components=['ethane', 'propane', 'n-butane', 'n-pentane'],
         zs=[0.40, 0.30, 0.20, 0.10]
     )
-    calc1.set_conditions(T_C=35, P_MPa=2.5)
+    calc1.set_conditions(T_C=25, P_MPa=2.5)
     calc1.calculate()
     calc1.print_result()
