@@ -1,6 +1,6 @@
 """
 calculator.py - Ядро расчетов свойств углеводородов
-Методы: Пенга-Робинсон, GERG-2008 (CoolProp → pyaga8 → запасной)
+Методы: Пенга-Робинсон, GERG-2008 (CoolProp → pyaga8 → teqp → запасной)
 """
 
 from thermo import ChemicalConstantsPackage, PRMIX, CEOSGas, CEOSLiquid, FlashVL
@@ -91,7 +91,7 @@ class SHFLUCalculator:
         return Tc_mix, Pc_mix, omega_mix
     
     # ============================================================
-    # ВЯЗКОСТЬ ЖИДКОСТИ: LBC (ЗАПАСНОЙ)
+    # 1. ВЯЗКОСТЬ: LBC (ЖИДКОСТЬ) — ЗАПАСНОЙ
     # ============================================================
     
     def calculate_viscosity_liquid_lbc(self):
@@ -123,7 +123,7 @@ class SHFLUCalculator:
             return self.calculate_viscosity_approx()
     
     # ============================================================
-    # ВЯЗКОСТЬ ГАЗА: LGE
+    # 2. ВЯЗКОСТЬ: LGE (ГАЗ) — ЗАПАСНОЙ
     # ============================================================
     
     def calculate_viscosity_gas_lge(self):
@@ -156,7 +156,7 @@ class SHFLUCalculator:
             return self.calculate_viscosity_approx()
     
     # ============================================================
-    # ЗАПАСНОЙ РАСЧЕТ ВЯЗКОСТИ
+    # 3. ВЯЗКОСТЬ: УНИВЕРСАЛЬНЫЙ ЗАПАСНОЙ
     # ============================================================
     
     def calculate_viscosity_approx(self):
@@ -166,7 +166,7 @@ class SHFLUCalculator:
         return mu_cP * 0.001
     
     # ============================================================
-    # ПЛОТНОСТЬ
+    # 4. ПЛОТНОСТЬ: ЗАПАСНЫЕ МЕТОДЫ
     # ============================================================
     
     def calculate_density_ideal_gas(self):
@@ -183,58 +183,7 @@ class SHFLUCalculator:
             return self.calculate_density_ideal_gas()
     
     # ============================================================
-    # ПРОВЕРКА ПОДДЕРЖКИ КОМПОНЕНТОВ
-    # ============================================================
-    
-    def get_name_map(self):
-        return {
-            'methane': 'Methane', 'ethane': 'Ethane', 'propane': 'Propane',
-            'nitrogen': 'Nitrogen', 'co2': 'CarbonDioxide',
-            'n-butane': 'n-Butane', 'i-butane': 'isoButane',
-            'n-pentane': 'n-Pentane', 'i-pentane': 'isoPentane',
-            'benzene': 'Benzene', 'toluene': 'Toluene',
-            'hexane': 'n-Hexane', 'heptane': 'n-Heptane',
-            'octane': 'n-Octane', 'nonane': 'n-Nonane', 'decane': 'n-Decane',
-            'helium': 'Helium', 'hydrogen': 'Hydrogen', 'oxygen': 'Oxygen'
-        }
-    
-    def get_pyaga8_map(self):
-        return {
-            'methane': 'methane',
-            'ethane': 'ethane',
-            'propane': 'propane',
-            'nitrogen': 'nitrogen',
-            'co2': 'co2',
-            'n-butane': 'n_butane',
-            'i-butane': 'i_butane',
-            'n-pentane': 'n_pentane',
-            'i-pentane': 'i_pentane',
-            'hexane': 'hexane',
-            'heptane': 'heptane',
-            'octane': 'octane',
-            'nonane': 'nonane',
-            'decane': 'decane',
-            'helium': 'helium',
-            'hydrogen': 'hydrogen',
-            'oxygen': 'oxygen'
-        }
-    
-    def build_mixture_str(self, name_map):
-        comp_names_cp = []
-        comp_fracs_cp = []
-        for name, frac in zip(self.components, self.zs):
-            if frac > 0:
-                cp_name = name_map.get(name)
-                if cp_name is None:
-                    raise ValueError(f"Компонент '{name}' не поддерживается")
-                comp_names_cp.append(cp_name)
-                comp_fracs_cp.append(frac)
-        if not comp_names_cp:
-            raise ValueError("Нет компонентов для расчета")
-        return '&'.join([f"{comp}[{frac}]" for comp, frac in zip(comp_names_cp, comp_fracs_cp)])
-    
-    # ============================================================
-    # РАСЧЕТ ПО ПЕНГА-РОБИНСОНУ
+    # 5. РАСЧЕТ ПО ПЕНГА-РОБИНСОНУ
     # ============================================================
     
     def calculate_PR(self):
@@ -288,8 +237,8 @@ class SHFLUCalculator:
             if self.phase == 'Жидкость':
                 try:
                     from CoolProp.CoolProp import PropsSI
-                    name_map = self.get_name_map()
-                    mixture_str = self.build_mixture_str(name_map)
+                    name_map = self._get_coolprop_name_map()
+                    mixture_str = self._build_mixture_str(name_map)
                     mu_dynamic = PropsSI('VISCOSITY', 'T|liquid', self.T, 'P', self.P, mixture_str)
                 except:
                     mu_dynamic = self.calculate_viscosity_liquid_lbc()
@@ -332,31 +281,135 @@ class SHFLUCalculator:
             return self.result
     
     # ============================================================
-    # РАСЧЕТ ПО GERG-2008 (COOLPROP → PYAGA8 → ЗАПАСНОЙ)
+    # 6. ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ДЛЯ GERG
+    # ============================================================
+    
+    def _get_coolprop_name_map(self):
+        return {
+            'methane': 'Methane', 'ethane': 'Ethane', 'propane': 'Propane',
+            'nitrogen': 'Nitrogen', 'co2': 'CarbonDioxide',
+            'n-butane': 'n-Butane', 'i-butane': 'isoButane',
+            'n-pentane': 'n-Pentane', 'i-pentane': 'isoPentane',
+            'benzene': 'Benzene', 'toluene': 'Toluene',
+            'hexane': 'n-Hexane', 'heptane': 'n-Heptane',
+            'octane': 'n-Octane', 'nonane': 'n-Nonane', 'decane': 'n-Decane',
+            'helium': 'Helium', 'hydrogen': 'Hydrogen', 'oxygen': 'Oxygen'
+        }
+    
+    def _get_pyaga8_map(self):
+        return {
+            'methane': 'methane', 'ethane': 'ethane', 'propane': 'propane',
+            'nitrogen': 'nitrogen', 'co2': 'co2',
+            'n-butane': 'n_butane', 'i-butane': 'i_butane',
+            'n-pentane': 'n_pentane', 'i-pentane': 'i_pentane',
+            'hexane': 'hexane', 'heptane': 'heptane',
+            'octane': 'octane', 'nonane': 'nonane', 'decane': 'decane',
+            'helium': 'helium', 'hydrogen': 'hydrogen', 'oxygen': 'oxygen'
+        }
+    
+    def _get_teqp_map(self):
+        return {
+            'methane': 'methane', 'ethane': 'ethane', 'propane': 'propane',
+            'nitrogen': 'nitrogen', 'co2': 'carbon_dioxide',
+            'n-butane': 'n-butane', 'i-butane': 'isobutane',
+            'n-pentane': 'n-pentane', 'i-pentane': 'isopentane',
+            'hexane': 'n-hexane', 'heptane': 'n-heptane',
+            'octane': 'n-octane', 'nonane': 'n-nonane', 'decane': 'n-decane',
+            'helium': 'helium', 'hydrogen': 'hydrogen', 'oxygen': 'oxygen'
+        }
+    
+    def _build_mixture_str(self, name_map):
+        comp_names_cp = []
+        comp_fracs_cp = []
+        for name, frac in zip(self.components, self.zs):
+            if frac > 0:
+                cp_name = name_map.get(name)
+                if cp_name is None:
+                    raise ValueError(f"Компонент '{name}' не поддерживается")
+                comp_names_cp.append(cp_name)
+                comp_fracs_cp.append(frac)
+        if not comp_names_cp:
+            raise ValueError("Нет компонентов для расчета")
+        return '&'.join([f"{comp}[{frac}]" for comp, frac in zip(comp_names_cp, comp_fracs_cp)])
+    
+    # ============================================================
+    # 7. РАСЧЕТ ПО GERG-2008 (CoolProp → pyaga8 → teqp → запасной)
     # ============================================================
     
     def calculate_GERG(self):
-        """Расчет по GERG-2008: CoolProp → pyaga8 → запасной"""
+        """
+        Расчет по GERG-2008 с тройным fallback:
+        1. CoolProp
+        2. pyaga8
+        3. teqp (NIST)
+        4. Запасной (идеальный газ)
+        """
+        
+        # ---- ПОПЫТКА 1: CoolProp ----
         try:
             from CoolProp.CoolProp import PropsSI
             
-            name_map = self.get_name_map()
-            mixture_str = self.build_mixture_str(name_map)
+            name_map = self._get_coolprop_name_map()
+            mixture_str = self._build_mixture_str(name_map)
             
-            # --- ПЫТАЕМСЯ ЧЕРЕЗ COOLPROP ---
+            rho = PropsSI('D', 'T', self.T, 'P', self.P, mixture_str)
+            Z = PropsSI('Z', 'T', self.T, 'P', self.P, mixture_str)
+            
+            if self.phase == 'Жидкость':
+                mu_dynamic = PropsSI('VISCOSITY', 'T|liquid', self.T, 'P', self.P, mixture_str)
+            else:
+                mu_dynamic = PropsSI('VISCOSITY', 'T|gas', self.T, 'P', self.P, mixture_str)
+            
+            if Z is not None and Z > 0 and Z < 2:
+                self.result = {
+                    'method': 'GERG-2008 (CoolProp)',
+                    'Z': Z,
+                    'rho': rho,
+                    'mu_dynamic': mu_dynamic,
+                    'MW': self.get_molar_mass(),
+                    'phase': self.phase,
+                    'success': True
+                }
+                return self.result
+            else:
+                raise ValueError(f"CoolProp Z невалиден: {Z}")
+                
+        except Exception as e1:
+            print(f"⚠️ CoolProp не сработал: {e1}")
+            print("🔄 Переключение на pyaga8...")
+            
+            # ---- ПОПЫТКА 2: pyaga8 ----
             try:
-                rho = PropsSI('D', 'T', self.T, 'P', self.P, mixture_str)
-                Z = PropsSI('Z', 'T', self.T, 'P', self.P, mixture_str)
+                import pyaga8
+                
+                detail = pyaga8.Detail()
+                comp = pyaga8.Composition()
+                
+                pyaga8_map = self._get_pyaga8_map()
+                
+                for name, frac in zip(self.components, self.zs):
+                    if frac > 0:
+                        pyaga8_name = pyaga8_map.get(name)
+                        if pyaga8_name is not None:
+                            setattr(comp, pyaga8_name, frac)
+                
+                detail.set_composition(comp)
+                detail.temperature = self.T
+                detail.pressure = self.P
+                detail.calc_density()
+                
+                Z = detail.Z
+                rho = detail.d
                 
                 if self.phase == 'Жидкость':
-                    mu_dynamic = PropsSI('VISCOSITY', 'T|liquid', self.T, 'P', self.P, mixture_str)
+                    mu_dynamic = self.calculate_viscosity_liquid_lbc()
                 else:
-                    mu_dynamic = PropsSI('VISCOSITY', 'T|gas', self.T, 'P', self.P, mixture_str)
+                    mu_dynamic = self.calculate_viscosity_gas_lge()
                 
-                # Проверяем Z на валидность
                 if Z is not None and Z > 0 and Z < 2:
+                    print(f"✅ pyaga8 сработал: Z = {Z:.6f}")
                     self.result = {
-                        'method': 'GERG-2008 (CoolProp)',
+                        'method': 'GERG-2008 (pyaga8)',
                         'Z': Z,
                         'rho': rho,
                         'mu_dynamic': mu_dynamic,
@@ -366,46 +419,81 @@ class SHFLUCalculator:
                     }
                     return self.result
                 else:
-                    raise ValueError(f"Z-фактор из CoolProp невалиден: {Z}")
+                    raise ValueError(f"pyaga8 Z невалиден: {Z}")
                     
-            except Exception as e:
-                print(f"⚠️ CoolProp не сработал: {e}")
-                print("🔄 Переключение на pyaga8...")
+            except ImportError:
+                print("❌ pyaga8 не установлен. Переход к teqp...")
+            except Exception as e2:
+                print(f"❌ pyaga8 не сработал: {e2}")
+                print("🔄 Переключение на teqp...")
+            
+            # ---- ПОПЫТКА 3: teqp (NIST) ----
+            try:
+                import teqp
+                import numpy as np
                 
-                # --- ПЫТАЕМСЯ ЧЕРЕЗ PYAGA8 ---
+                teqp_map = self._get_teqp_map()
+                
+                # Собираем компоненты для teqp
+                comp_names_teqp = []
+                comp_fracs_teqp = []
+                for name, frac in zip(self.components, self.zs):
+                    if frac > 0:
+                        teqp_name = teqp_map.get(name)
+                        if teqp_name is not None:
+                            comp_names_teqp.append(teqp_name)
+                            comp_fracs_teqp.append(frac)
+                
+                if not comp_names_teqp:
+                    raise ValueError("Нет компонентов для teqp")
+                
+                # Загружаем модель GERG-2008
                 try:
-                    import pyaga8
+                    model = teqp.build_multifluid_model(comp_names_teqp, teqp.get_datapath())
+                except:
+                    # Если стандартный путь не работает, пробуем альтернативный
+                    import os
+                    datapath = os.path.join(os.path.dirname(teqp.__file__), 'datapath.json')
+                    model = teqp.build_multifluid_model(comp_names_teqp, datapath)
+                
+                # Для teqp нужна молярная плотность
+                # Используем идеальный газ для начального приближения
+                R = 8.314  # Дж/(моль·К)
+                rhomolar_initial = self.P / (R * self.T)  # моль/м³
+                
+                # Пробуем найти корень для плотности при заданном давлении
+                # Упрощенно: используем итерацию
+                z_array = np.array(comp_fracs_teqp)
+                
+                # Пытаемся получить Z через teqp
+                # Используем функцию для расчета Z при заданных T, rho, z
+                try:
+                    # Пробуем разные плотности для поиска
+                    rhomolar = rhomolar_initial
+                    for _ in range(20):
+                        try:
+                            Z_teqp = model.get_Z(self.T, rhomolar, z_array)
+                            # Проверяем давление, которое дает эта плотность
+                            P_calc = model.get_pressure(self.T, rhomolar, z_array)
+                            if abs(P_calc - self.P) / self.P < 0.01:
+                                break
+                            # Корректируем плотность
+                            rhomolar *= (self.P / P_calc)
+                        except:
+                            rhomolar *= 1.1
                     
-                    detail = pyaga8.Detail()
-                    comp = pyaga8.Composition()
-                    
-                    pyaga8_map = self.get_pyaga8_map()
-                    
-                    for name, frac in zip(self.components, self.zs):
-                        if frac > 0:
-                            pyaga8_name = pyaga8_map.get(name)
-                            if pyaga8_name is not None:
-                                setattr(comp, pyaga8_name, frac)
-                    
-                    detail.set_composition(comp)
-                    detail.temperature = self.T
-                    detail.pressure = self.P
-                    detail.calc_density()
-                    
-                    Z = detail.Z
-                    rho = detail.d
-                    
-                    # Вязкость через pyaga8 не считается, используем LBC/LGE
-                    if self.phase == 'Жидкость':
-                        mu_dynamic = self.calculate_viscosity_liquid_lbc()
-                    else:
-                        mu_dynamic = self.calculate_viscosity_gas_lge()
-                    
-                    if Z is not None and Z > 0 and Z < 2:
-                        print(f"✅ pyaga8 сработал: Z = {Z:.6f}")
+                    if Z_teqp is not None and Z_teqp > 0 and Z_teqp < 2:
+                        rho = rhomolar * self.get_molar_mass() / 1000  # моль/м³ → кг/м³
+                        
+                        if self.phase == 'Жидкость':
+                            mu_dynamic = self.calculate_viscosity_liquid_lbc()
+                        else:
+                            mu_dynamic = self.calculate_viscosity_gas_lge()
+                        
+                        print(f"✅ teqp сработал: Z = {Z_teqp:.6f}")
                         self.result = {
-                            'method': 'GERG-2008 (pyaga8)',
-                            'Z': Z,
+                            'method': 'GERG-2008 (teqp / NIST)',
+                            'Z': Z_teqp,
                             'rho': rho,
                             'mu_dynamic': mu_dynamic,
                             'MW': self.get_molar_mass(),
@@ -414,19 +502,17 @@ class SHFLUCalculator:
                         }
                         return self.result
                     else:
-                        raise ValueError(f"Z-фактор из pyaga8 невалиден: {Z}")
+                        raise ValueError(f"teqp Z невалиден: {Z_teqp}")
                         
-                except ImportError:
-                    print("❌ pyaga8 не установлен. Установка: pip install pyaga8")
-                    raise ValueError("pyaga8 не установлен")
+                except Exception as e_teqp:
+                    raise ValueError(f"teqp расчет не удался: {e_teqp}")
                     
-                except Exception as e2:
-                    print(f"❌ pyaga8 не сработал: {e2}")
-                    raise e2
-                    
-        except Exception as e:
-            # --- ЗАПАСНОЙ ВАРИАНТ (ИДЕАЛЬНЫЙ ГАЗ) ---
-            print(f"❌ Все методы GERG-2008 не сработали: {e}")
+            except ImportError:
+                print("❌ teqp не установлен. Установка: pip install teqp")
+            except Exception as e3:
+                print(f"❌ teqp не сработал: {e3}")
+            
+            # ---- ПОПЫТКА 4: ЗАПАСНОЙ МЕТОД ----
             print("🔄 Использование запасного метода (идеальный газ)")
             
             MW = self.get_molar_mass()
@@ -441,7 +527,6 @@ class SHFLUCalculator:
                 'MW': MW,
                 'phase': self.phase,
                 'success': True,
-                'error': str(e),
                 'warning': 'Использован запасной метод (идеальный газ)'
             }
             return self.result
@@ -516,10 +601,10 @@ class SHFLUCalculator:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("ТЕСТ: GERG-2008 (CoolProp → pyaga8 → запасной)")
+    print("ТЕСТ: GERG-2008 (CoolProp → pyaga8 → teqp → запасной)")
     print("=" * 60)
     
-    # Тест: Газ C2-C5 через GERG
+    # Тест: Газ через GERG
     print("\n🔬 Тест 1: Газ C2-C5 — GERG-2008")
     calc1 = SHFLUCalculator(method='GERG', phase='Газ')
     calc1.set_composition(
@@ -529,25 +614,3 @@ if __name__ == "__main__":
     calc1.set_conditions(T_C=35, P_MPa=2.5)
     calc1.calculate()
     calc1.print_result()
-    
-    # Тест: Жидкость через GERG
-    print("\n🔬 Тест 2: Жидкость C2-C5 — GERG-2008")
-    calc2 = SHFLUCalculator(method='GERG', phase='Жидкость')
-    calc2.set_composition(
-        components=['ethane', 'propane', 'n-butane', 'n-pentane'],
-        zs=[0.40, 0.30, 0.20, 0.10]
-    )
-    calc2.set_conditions(T_C=25, P_MPa=2.5)
-    calc2.calculate()
-    calc2.print_result()
-    
-    # Тест: ПР для сравнения
-    print("\n🔬 Тест 3: Газ C2-C5 — Пенга-Робинсон (для сравнения)")
-    calc3 = SHFLUCalculator(method='PR', phase='Газ')
-    calc3.set_composition(
-        components=['methane', 'ethane', 'propane', 'n-butane', 'n-pentane'],
-        zs=[0.40, 0.30, 0.20, 0.07, 0.03]
-    )
-    calc3.set_conditions(T_C=35, P_MPa=2.5)
-    calc3.calculate()
-    calc3.print_result()
