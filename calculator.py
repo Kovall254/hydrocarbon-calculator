@@ -364,9 +364,9 @@ class SHFLUCalculator:
             
             self.result = {
                 'method': 'GERG-2008 (CoolProp)',
-                'Z': None,
-                'rho': None,
-                'mu_dynamic': None,
+                'Z': 1.0,
+                'rho': rho,
+                'mu_dynamic': mu,
                 'MW': MW,
                 'phase': self.phase,
                 'success': False,
