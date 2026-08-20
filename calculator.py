@@ -177,13 +177,13 @@ class SHFLUCalculator:
     def calculate_density_from_Z(self, Z):
         MW = self.get_molar_mass()
         R = 8314
-        if Z > 0:
+        if Z is not None and Z > 0:
             return (self.P * MW) / (Z * R * self.T)
         else:
             return self.calculate_density_ideal_gas()
     
     # ============================================================
-    # 5. РАСЧЕТ ПО ПЕНГА-РОБИНСОНУ (ЖИДКОСТЬ → GERG)
+    # 5. РАСЧЕТ ПО ПЕНГА-РОБИНСОНУ
     # ============================================================
     
     def calculate_PR(self):
@@ -271,7 +271,7 @@ class SHFLUCalculator:
             
             self.result = {
                 'method': 'Пенга-Робинсон',
-                'Z': Z,
+                'Z': Z if Z is not None else 1.0,
                 'rho_gas': rho_gas,
                 'rho_liquid': rho_liquid,
                 'MW': self.get_molar_mass(),
@@ -289,14 +289,14 @@ class SHFLUCalculator:
             
             self.result = {
                 'method': 'Пенга-Робинсон',
-                'Z': 1.0,
+                'Z': None,
                 'rho_gas': rho if self.phase != 'Жидкость' else None,
                 'rho_liquid': rho if self.phase == 'Жидкость' else None,
                 'MW': MW,
                 'VF': None,
                 'mu_dynamic': mu,
                 'phase': self.phase,
-                'success': True,
+                'success': False,
                 'error': str(e)
             }
             return self.result
@@ -308,6 +308,10 @@ class SHFLUCalculator:
     def calculate_GERG(self):
         try:
             from CoolProp.CoolProp import PropsSI
+            
+            # Проверка: если список компонентов пуст
+            if not self.components:
+                raise ValueError("Список компонентов пуст")
             
             name_map = {
                 'methane': 'Methane', 'ethane': 'Ethane', 'propane': 'Propane',
@@ -325,14 +329,30 @@ class SHFLUCalculator:
             
             for name, frac in zip(self.components, self.zs):
                 if frac > 0:
-                    comp_names_cp.append(name_map.get(name, name))
+                    cp_name = name_map.get(name)
+                    if cp_name is None:
+                        raise ValueError(f"Компонент '{name}' не поддерживается CoolProp")
+                    comp_names_cp.append(cp_name)
                     comp_fracs_cp.append(frac)
+            
+            if not comp_names_cp:
+                raise ValueError("Нет компонентов для расчета")
             
             mixture_str = '&'.join([f"{comp}[{frac}]" for comp, frac in zip(comp_names_cp, comp_fracs_cp)])
             
-            rho = PropsSI('D', 'T', self.T, 'P', self.P, mixture_str)
-            Z = PropsSI('Z', 'T', self.T, 'P', self.P, mixture_str)
+            # Плотность
+            try:
+                rho = PropsSI('D', 'T', self.T, 'P', self.P, mixture_str)
+            except Exception as e:
+                raise ValueError(f"Ошибка расчета плотности: {str(e)}")
             
+            # Z-фактор
+            try:
+                Z = PropsSI('Z', 'T', self.T, 'P', self.P, mixture_str)
+            except Exception as e:
+                raise ValueError(f"Ошибка расчета Z-фактора: {str(e)}")
+            
+            # Вязкость
             try:
                 if self.phase == 'Жидкость':
                     mu_dynamic = PropsSI('VISCOSITY', 'T|liquid', self.T, 'P', self.P, mixture_str)
@@ -345,6 +365,10 @@ class SHFLUCalculator:
                     mu_dynamic = self.calculate_viscosity_gas_lge()
             
             MW = self.get_molar_mass()
+            
+            # Проверка Z на валидность
+            if Z is None or Z <= 0:
+                Z = 1.0
             
             self.result = {
                 'method': 'GERG-2008 (CoolProp)',
@@ -364,7 +388,7 @@ class SHFLUCalculator:
             
             self.result = {
                 'method': 'GERG-2008 (CoolProp)',
-                'Z': 1.0,
+                'Z': None,
                 'rho': rho,
                 'mu_dynamic': mu,
                 'MW': MW,
@@ -417,7 +441,10 @@ class SHFLUCalculator:
             print(f"  {name:12} {frac*100:5.1f} %")
         
         print(f"\nРезультаты:")
-        print(f"  Z-фактор:         {self.result.get('Z', 1.0):.6f}")
+        if self.result.get('Z') is not None:
+            print(f"  Z-фактор:         {self.result['Z']:.6f}")
+        else:
+            print(f"  Z-фактор:         — (ошибка)")
         
         if self.result.get('rho_gas'):
             print(f"  Плотность (газ):  {self.result['rho_gas']:.3f} кг/м³")
@@ -438,16 +465,38 @@ class SHFLUCalculator:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("ТЕСТ: ПР (ЖИДКОСТЬ → GERG)")
+    print("ТЕСТ: ПР и GERG с обработкой ошибок")
     print("=" * 60)
     
-    # Жидкость через ПР (вязкость через GERG)
-    print("\n🔬 Тест: Жидкость C2-C5 — Пенга-Робинсон (вязкость через GERG)")
-    calc1 = SHFLUCalculator(method='PR', phase='Жидкость')
+    # Тест: Газ C2-C5 через ПР
+    print("\n🔬 Тест 1: Газ C2-C5 — Пенга-Робинсон")
+    calc1 = SHFLUCalculator(method='PR', phase='Газ')
     calc1.set_composition(
         components=['ethane', 'propane', 'n-butane', 'n-pentane'],
         zs=[0.40, 0.30, 0.20, 0.10]
     )
-    calc1.set_conditions(T_C=25, P_MPa=2.5)
+    calc1.set_conditions(T_C=35, P_MPa=2.5)
     calc1.calculate()
     calc1.print_result()
+    
+    # Тест: Газ C2-C5 через GERG
+    print("\n🔬 Тест 2: Газ C2-C5 — GERG-2008")
+    calc2 = SHFLUCalculator(method='GERG', phase='Газ')
+    calc2.set_composition(
+        components=['ethane', 'propane', 'n-butane', 'n-pentane'],
+        zs=[0.40, 0.30, 0.20, 0.10]
+    )
+    calc2.set_conditions(T_C=35, P_MPa=2.5)
+    calc2.calculate()
+    calc2.print_result()
+    
+    # Тест: Ошибка — неизвестный компонент
+    print("\n🔬 Тест 3: Ошибка — неизвестный компонент (GERG)")
+    calc3 = SHFLUCalculator(method='GERG', phase='Газ')
+    calc3.set_composition(
+        components=['ethane', 'propane', 'unknown'],
+        zs=[0.40, 0.30, 0.30]
+    )
+    calc3.set_conditions(T_C=35, P_MPa=2.5)
+    calc3.calculate()
+    calc3.print_result()
