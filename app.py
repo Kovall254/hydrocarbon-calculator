@@ -364,9 +364,23 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
     
     diff = abs(Z_PR - Z_GERG) / Z_GERG * 100 if (Z_PR is not None and Z_GERG is not None and Z_GERG > 0) else 0
     
+    # Добавляем информацию о методе
+    method_PR = result_PR.get('method', 'Пенга-Робинсон')
+    method_GERG = result_GERG.get('method', 'GERG-2008')
+    
     type_label = "Массовые" if input_type == "Массовые" else "Мольные"
     
     quote_text, quote_author = get_random_quote()
+    
+    # Предупреждения, если были
+    warning_PR = result_PR.get('warning', '')
+    warning_GERG = result_GERG.get('warning', '')
+    
+    warnings_text = ""
+    if warning_PR:
+        warnings_text += f"  ⚠️ Пенга-Робинсон: {warning_PR}\n"
+    if warning_GERG:
+        warnings_text += f"  ⚠️ GERG-2008: {warning_GERG}\n"
     
     return f"""
 ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -403,7 +417,7 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  {T_C:.1f}°C, {P_MPa:.3f} МПа                                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  Параметр                 │  Пенга-Робинсон    │  GERG-2008               │
+│  Параметр                 │  {method_PR}    │  {method_GERG}               │
 ├───────────────────────────┼────────────────────┼──────────────────────────┤
 │  Z-фактор                 │  {Z_PR_str:>9}     │  {Z_GERG_str:>9}            │
 │  Плотность, кг/м³         │  {rho_PR_str:>9}        │  {rho_GERG_str:>9}          │
@@ -411,6 +425,8 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
 │  Кин. вязкость, сСт       │  {nu_PR_str:>9}        │  {nu_GERG_str:>9}          │
 │  Мол. масса, кг/кмоль     │  {result_PR['MW']:.3f}     │  {result_GERG['MW']:.3f}            │
 └───────────────────────────┴────────────────────┴──────────────────────────┘
+
+{warnings_text if warnings_text else "  ✅ Ошибок не обнаружено"}
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ СРАВНЕНИЕ МЕТОДОВ                                                         │
@@ -888,15 +904,22 @@ if col2 is not None:
             input_type = st.session_state.get('input_type', 'Мольные')
             phase_type = st.session_state.get('phase_type', 'Газ')
             
+            # ---- ОТОБРАЖЕНИЕ МЕТОДА С УЧЕТОМ PYAGA8 ----
             if method == "Пенга-Робинсон":
                 result = result_PR
-                st.info(f"📘 Метод: Пенга-Робинсон ({phase_type})")
+                method_name = result.get('method', 'Пенга-Робинсон')
+                st.info(f"📘 Метод: {method_name} ({phase_type})")
             elif method == "GERG-2008":
                 result = result_GERG
-                st.info(f"📗 Метод: GERG-2008 ({phase_type})")
+                method_name = result.get('method', 'GERG-2008')
+                st.info(f"📗 Метод: {method_name} ({phase_type})")
             else:
                 result = None
                 st.info("📊 Сравнение методов")
+            
+            # ---- ПРЕДУПРЕЖДЕНИЕ (если есть) ----
+            if result and result.get('warning'):
+                st.warning(f"⚠️ {result['warning']}")
             
             type_label = "Массовые" if input_type == "Массовые" else "Мольные"
             st.caption(f"Тип долей: {type_label} | Фаза: {phase_type}")
@@ -959,6 +982,7 @@ if col2 is not None:
                 if result.get('Z') is None:
                     st.info("💡 Z-фактор не рассчитан. Проверьте состав и условия.")
             
+            # ---- СРАВНЕНИЕ МЕТОДОВ ----
             if method == "Сравнение методов":
                 with st.expander("Сравнение методов", expanded=True):
                     if result_PR.get('success', False) and result_GERG.get('success', False):
@@ -979,10 +1003,12 @@ if col2 is not None:
                         
                         with col_comp1:
                             Z_display = f"{Z_PR:.6f}" if Z_PR is not None else "—"
-                            st.metric("Пенга-Робинсон", Z_display)
+                            method_name = result_PR.get('method', 'Пенга-Робинсон')
+                            st.metric(method_name, Z_display)
                         with col_comp2:
                             Z_display = f"{Z_GERG:.6f}" if Z_GERG is not None else "—"
-                            st.metric("GERG-2008", Z_display)
+                            method_name = result_GERG.get('method', 'GERG-2008')
+                            st.metric(method_name, Z_display)
                         with col_comp3:
                             st.metric("Разница", diff_str)
             
@@ -1048,7 +1074,7 @@ st.markdown(f"""
     <div class="group">ООО «ИЗП» · Группа моделирования технологических процессов</div>
     <div class="lead">под руководством Клепцова Д.В.</div>
     <div style="margin-top:10px; font-size:12px; color:#95a5a6;">
-        Python · Streamlit · Peng-Robinson · GERG-2008<br>
+        Python · Streamlit · Peng-Robinson · GERG-2008 (CoolProp / pyaga8)<br>
         Расчетная точность: 99.8%
     </div>
 </div>
