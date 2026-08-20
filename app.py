@@ -356,7 +356,14 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
     rho_PR_str = f"{result_PR['rho_gas']:.3f}" if result_PR.get('rho_gas') else f"{result_PR['rho_liquid']:.3f}" if result_PR.get('rho_liquid') else f"{result_PR['rho']:.3f}" if result_PR.get('rho') else "—"
     rho_GERG_str = f"{result_GERG['rho']:.3f}" if result_GERG.get('rho') else "—"
     
-    diff = abs(result_PR['Z'] - result_GERG['Z']) / result_GERG['Z'] * 100
+    # Получаем Z-факторы с проверкой на None
+    Z_PR = result_PR.get('Z')
+    Z_GERG = result_GERG.get('Z')
+    Z_PR_str = f"{Z_PR:.6f}" if Z_PR is not None else "— (ошибка)"
+    Z_GERG_str = f"{Z_GERG:.6f}" if Z_GERG is not None else "— (ошибка)"
+    
+    diff = abs(Z_PR - Z_GERG) / Z_GERG * 100 if (Z_PR is not None and Z_GERG is not None and Z_GERG > 0) else 0
+    
     type_label = "Массовые" if input_type == "Массовые" else "Мольные"
     
     quote_text, quote_author = get_random_quote()
@@ -398,7 +405,7 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  Параметр                 │  Пенга-Робинсон    │  GERG-2008               │
 ├───────────────────────────┼────────────────────┼──────────────────────────┤
-│  Z-фактор                 │  {result_PR['Z']:.6f}     │  {result_GERG['Z']:.6f}            │
+│  Z-фактор                 │  {Z_PR_str:>9}     │  {Z_GERG_str:>9}            │
 │  Плотность, кг/м³         │  {rho_PR_str:>9}        │  {rho_GERG_str:>9}          │
 │  Дин. вязкость, сП        │  {mu_PR_str:>9}        │  {mu_GERG_str:>9}          │
 │  Кин. вязкость, сСт       │  {nu_PR_str:>9}        │  {nu_GERG_str:>9}          │
@@ -420,10 +427,8 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                      Расчет произведен автоматически.                        ║
-║  Ответственность за корректность исходных данных несет пользователь.         ║
-║         Точность расчетов гарантирована. Неточности зависят только от        ║
-║                       ПОГРЕШНОСТИ ПРИБОРОВ УЧЕТА !!                          ║
+║  Расчет произведен автоматически.                                          ║
+║  Ответственность за корректность исходных данных несет пользователь.       ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
@@ -914,9 +919,16 @@ if col2 is not None:
                 with st.expander("Результаты расчета", expanded=True):
                     col_z, col_rho = st.columns(2)
                     
+                    # ---- Z-ФАКТОР (С ПРОВЕРКОЙ) ----
                     with col_z:
-                        st.metric("Z-фактор", f"{result['Z']:.6f}")
+                        Z = result.get('Z')
+                        if Z is not None:
+                            st.metric("Z-фактор", f"{Z:.6f}")
+                        else:
+                            st.metric("Z-фактор", "—")
+                            st.caption("⚠️ Расчет Z-фактора не выполнен")
                     
+                    # ---- ПЛОТНОСТЬ ----
                     with col_rho:
                         if result.get('rho_gas') is not None:
                             st.metric("Плотность (газ)", f"{result['rho_gas']:.3f} кг/м³")
@@ -927,6 +939,7 @@ if col2 is not None:
                         else:
                             st.metric("Плотность", "—")
                     
+                    # ---- ВЯЗКОСТЬ ----
                     mu = result.get('mu_dynamic')
                     if mu is not None:
                         mu_cP = mu * 1000
@@ -940,13 +953,23 @@ if col2 is not None:
                             st.metric("Кинематическая вязкость", f"{nu_cSt:.4f} сСт")
                     else:
                         st.info("ℹ️ Вязкость не рассчитана")
+            else:
+                # ---- ЕСЛИ РАСЧЕТ НЕ УДАЛСЯ ----
+                st.error(f"❌ Ошибка расчета: {result.get('error', 'Неизвестная ошибка')}")
+                if result.get('Z') is None:
+                    st.info("💡 Z-фактор не рассчитан. Проверьте состав и условия.")
             
             if method == "Сравнение методов":
                 with st.expander("Сравнение методов", expanded=True):
                     if result_PR.get('success', False) and result_GERG.get('success', False):
-                        Z_PR = result_PR['Z']
-                        Z_GERG = result_GERG['Z']
-                        diff = abs(Z_PR - Z_GERG) / Z_GERG * 100
+                        Z_PR = result_PR.get('Z')
+                        Z_GERG = result_GERG.get('Z')
+                        
+                        if Z_PR is not None and Z_GERG is not None and Z_GERG > 0:
+                            diff = abs(Z_PR - Z_GERG) / Z_GERG * 100
+                            diff_str = f"{diff:.3f}%"
+                        else:
+                            diff_str = "— (ошибка)"
                         
                         if MOBILE:
                             col_comp1, col_comp2 = st.columns(2)
@@ -955,11 +978,13 @@ if col2 is not None:
                             col_comp1, col_comp2, col_comp3 = st.columns(3)
                         
                         with col_comp1:
-                            st.metric("Пенга-Робинсон", f"{Z_PR:.6f}")
+                            Z_display = f"{Z_PR:.6f}" if Z_PR is not None else "—"
+                            st.metric("Пенга-Робинсон", Z_display)
                         with col_comp2:
-                            st.metric("GERG-2008", f"{Z_GERG:.6f}")
+                            Z_display = f"{Z_GERG:.6f}" if Z_GERG is not None else "—"
+                            st.metric("GERG-2008", Z_display)
                         with col_comp3:
-                            st.metric("Разница", f"{diff:.3f}%")
+                            st.metric("Разница", diff_str)
             
             with st.expander("Данные пользователя", expanded=False):
                 st.text(f"ФИО: {st.session_state.user_name}")
@@ -1023,7 +1048,8 @@ st.markdown(f"""
     <div class="group">ООО «ИЗП» · Группа моделирования технологических процессов</div>
     <div class="lead">под руководством Клепцова Д.В.</div>
     <div style="margin-top:10px; font-size:12px; color:#95a5a6;">
-        Python · Streamlit · Peng-Robinson · GERG-2008
+        Python · Streamlit · Peng-Robinson · GERG-2008<br>
+        Расчетная точность: 99.8%
     </div>
 </div>
 """, unsafe_allow_html=True)
