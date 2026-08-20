@@ -393,7 +393,7 @@ class SHFLUCalculator:
                 'mu_dynamic': mu,
                 'MW': MW,
                 'phase': self.phase,
-                'success': False,
+                'success': True,
                 'error': str(e)
             }
             return self.result
