@@ -1,5 +1,5 @@
 # ============================================================
-# МОДУЛЬ: app.py (ОСНОВНОЙ КАЛЬКУЛЯТОР)
+# МОДУЛЬ: app.py (ОСНОВНОЙ КАЛЬКУЛЯТОР — ТОЛЬКО ПЕНГА-РОБИНСОН)
 # ============================================================
 
 import streamlit as st
@@ -23,7 +23,7 @@ if 'theme' not in st.session_state:
     st.session_state.theme = 'light'
 
 # ============================================================
-# БЛОК 2: ФУНКЦИЯ ВОЗВРАТА CSS В ЗАВИСИМОСТИ ОТ ТЕМЫ
+# БЛОК 2: ФУНКЦИЯ ВОЗВРАТА CSS
 # ============================================================
 
 def get_theme_css():
@@ -217,15 +217,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# БЛОК 4: ОТПРАВКА НА ПОЧТУ (MAIL.RU)
+# БЛОК 4: ОТПРАВКА НА ПОЧТУ
 # ============================================================
 
 def send_protocol_by_email(report_text, user_name, user_workshop, user_sensor, T_C, P_MPa, filename):
-    """Автоматическая отправка протокола на почту через Mail.ru SMTP"""
     try:
         SMTP_SERVER = "smtp.mail.ru"
         SMTP_PORT = 465
-        
         SENDER_EMAIL = "pasha_ko_00@mail.ru"
         SENDER_PASSWORD = "LbCQTZLHLz94veadqqVY"
         RECEIVER_EMAIL = "pasha_ko_00@mail.ru"
@@ -255,7 +253,6 @@ def send_protocol_by_email(report_text, user_name, user_workshop, user_sensor, T
 """
         
         msg.attach(MIMEText(body, 'plain', 'utf-8'))
-        
         part = MIMEBase('application', 'octet-stream')
         part.set_payload(report_text.encode('utf-8'))
         encoders.encode_base64(part)
@@ -266,9 +263,7 @@ def send_protocol_by_email(report_text, user_name, user_workshop, user_sensor, T
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.send_message(msg)
         server.quit()
-        
         return True, "✅ Протокол отправлен на почту Mail.ru"
-        
     except Exception as e:
         return False, f"❌ Ошибка отправки: {str(e)}"
 
@@ -310,17 +305,9 @@ def is_mobile():
 
 MOBILE = is_mobile()
 
-def normalize_composition(components):
-    """Нормализация состава до 100%"""
-    total = sum(components.values())
-    if total > 0 and abs(total - 100) > 0.01:
-        for key in components:
-            components[key] = (components[key] / total) * 100
-    return components
-
-def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
-                   user_name, user_workshop, user_sensor, input_type, phase_type, components_mass):
-    """Формирует текстовый протокол"""
+def generate_report(result, components, T_C, P_MPa,
+                   user_name, user_workshop, user_sensor, input_type, phase_type):
+    """Формирует текстовый протокол (только Пенга-Робинсон)"""
     
     display_names = {
         'helium': 'Гелий', 'hydrogen': 'Водород', 'oxygen': 'Кислород',
@@ -341,46 +328,26 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
             display = display_names.get(key, key)
             comp_str += f"    {display:<20} {value:>6.1f} %\n"
     
-    mu_PR = result_PR.get('mu_dynamic')
-    mu_GERG = result_GERG.get('mu_dynamic')
+    mu = result.get('mu_dynamic')
+    mu_str = f"{mu*1000:.4f}" if mu is not None else "—"
     
-    mu_PR_str = f"{mu_PR*1000:.4f}" if mu_PR is not None else "—"
-    mu_GERG_str = f"{mu_GERG*1000:.4f}" if mu_GERG is not None else "—"
+    rho = result.get('rho_gas') or result.get('rho_liquid') or result.get('rho') or 1.0
+    nu_str = f"{(mu/rho)*1e6:.4f}" if mu is not None else "—"
     
-    rho_PR = result_PR.get('rho_gas') or result_PR.get('rho_liquid') or result_PR.get('rho') or 1.0
-    rho_GERG = result_GERG.get('rho') or 1.0
+    rho_str = f"{result['rho_gas']:.3f}" if result.get('rho_gas') else f"{result['rho_liquid']:.3f}" if result.get('rho_liquid') else "—"
     
-    nu_PR_str = f"{(mu_PR/rho_PR)*1e6:.4f}" if mu_PR is not None else "—"
-    nu_GERG_str = f"{(mu_GERG/rho_GERG)*1e6:.4f}" if mu_GERG is not None else "—"
-    
-    rho_PR_str = f"{result_PR['rho_gas']:.3f}" if result_PR.get('rho_gas') else f"{result_PR['rho_liquid']:.3f}" if result_PR.get('rho_liquid') else f"{result_PR['rho']:.3f}" if result_PR.get('rho') else "—"
-    rho_GERG_str = f"{result_GERG['rho']:.3f}" if result_GERG.get('rho') else "—"
-    
-    # Получаем Z-факторы с проверкой на None
-    Z_PR = result_PR.get('Z')
-    Z_GERG = result_GERG.get('Z')
-    Z_PR_str = f"{Z_PR:.6f}" if Z_PR is not None else "— (ошибка)"
-    Z_GERG_str = f"{Z_GERG:.6f}" if Z_GERG is not None else "— (ошибка)"
-    
-    diff = abs(Z_PR - Z_GERG) / Z_GERG * 100 if (Z_PR is not None and Z_GERG is not None and Z_GERG > 0) else 0
-    
-    # Добавляем информацию о методе
-    method_PR = result_PR.get('method', 'Пенга-Робинсон')
-    method_GERG = result_GERG.get('method', 'GERG-2008')
+    Z = result.get('Z')
+    Z_str = f"{Z:.6f}" if Z is not None else "— (ошибка)"
     
     type_label = "Массовые" if input_type == "Массовые" else "Мольные"
     
+    is_pure = result.get('is_pure', False)
+    pure_label = "Да" if is_pure else "Нет"
+    
     quote_text, quote_author = get_random_quote()
     
-    # Предупреждения, если были
-    warning_PR = result_PR.get('warning', '')
-    warning_GERG = result_GERG.get('warning', '')
-    
-    warnings_text = ""
-    if warning_PR:
-        warnings_text += f"  ⚠️ Пенга-Робинсон: {warning_PR}\n"
-    if warning_GERG:
-        warnings_text += f"  ⚠️ GERG-2008: {warning_GERG}\n"
+    warning = result.get('warning', '')
+    warning_text = f"  ⚠️ {warning}\n" if warning else "  ✅ Ошибок не обнаружено\n"
     
     return f"""
 ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -395,6 +362,7 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
 │  Цех:              {user_workshop:<40} │
 │  Датчик:           {user_sensor:<40} │
 │  Фаза:             {phase_type:<44}                                      │
+│  Чистая среда:     {pure_label:<44}                                      │
 │  Дата расчета:     {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}                    │
 │  Тип долей:        {type_label:<44}                                      │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -404,7 +372,7 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  Температура:        {T_C:>7.1f} °C                                    │
 │  Давление:           {P_MPa:>7.3f} МПа                                 │
-│  Метод:              {method:<44}                                      │
+│  Метод:              Пенга-Робинсон                                       │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -417,24 +385,14 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  {T_C:.1f}°C, {P_MPa:.3f} МПа                                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  Параметр                 │  {method_PR}    │  {method_GERG}               │
-├───────────────────────────┼────────────────────┼──────────────────────────┤
-│  Z-фактор                 │  {Z_PR_str:>9}     │  {Z_GERG_str:>9}            │
-│  Плотность, кг/м³         │  {rho_PR_str:>9}        │  {rho_GERG_str:>9}          │
-│  Дин. вязкость, сП        │  {mu_PR_str:>9}        │  {mu_GERG_str:>9}          │
-│  Кин. вязкость, сСт       │  {nu_PR_str:>9}        │  {nu_GERG_str:>9}          │
-│  Мол. масса, кг/кмоль     │  {result_PR['MW']:.3f}     │  {result_GERG['MW']:.3f}            │
-└───────────────────────────┴────────────────────┴──────────────────────────┘
-
-{warnings_text if warnings_text else "  ✅ Ошибок не обнаружено"}
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ СРАВНЕНИЕ МЕТОДОВ                                                         │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  Разница Z-фактора:      {diff:.3f} %                                           │
-│  Рекомендация:           {'Z-факторы близки, методы согласуются' if diff < 2 else 'Рекомендуется использовать GERG-2008 для повышенной точности'} │
+│  Z-фактор:               {Z_str:>12}                               │
+│  Плотность, кг/м³:       {rho_str:>12}                               │
+│  Дин. вязкость, сП:      {mu_str:>12}                               │
+│  Кин. вязкость, сСт:     {nu_str:>12}                               │
+│  Мол. масса, кг/кмоль:   {result.get('MW', 0):>12.3f}                               │
 └─────────────────────────────────────────────────────────────────────────────┘
 
+{warning_text}
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  ЦИТАТА УЧЁНОГО                                                           │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -449,10 +407,8 @@ def generate_report(result_PR, result_GERG, components, T_C, P_MPa, method,
 """
 
 def mass_to_mole(components_mass, components_mw):
-    """Пересчет массовых долей в мольные"""
     mass_values = {}
     total_mass = 0
-    
     for key, value in components_mass.items():
         if value > 0:
             mass_values[key] = value
@@ -460,7 +416,6 @@ def mass_to_mole(components_mass, components_mw):
     
     mole_values = {}
     total_moles = 0
-    
     for key, mass in mass_values.items():
         if key in components_mw and components_mw[key] > 0:
             moles = mass / components_mw[key]
@@ -471,19 +426,15 @@ def mass_to_mole(components_mass, components_mw):
     for key, moles in mole_values.items():
         if total_moles > 0:
             mole_fractions[key] = (moles / total_moles) * 100
-    
     return mole_fractions
 
 def login_form():
-    """Форма входа для авторизации"""
     st.markdown("### Вход в систему")
     st.markdown("Введите данные для автозаполнения протокола")
-    
     with st.form("login_form"):
         name = st.text_input("Фамилия И.О.", placeholder="Например: Иванов И.И.")
         workshop = st.text_input("Цех", placeholder="Например: Цех №5")
         submitted = st.form_submit_button("Войти")
-        
         if submitted and name and workshop:
             st.session_state.user_name = name
             st.session_state.user_workshop = workshop
@@ -497,22 +448,13 @@ def login_form():
 # ============================================================
 
 if MOBILE:
-    st.set_page_config(
-        page_title="Калькулятор углеводородов",
-        page_icon="🧪",
-        layout="centered"
-    )
+    st.set_page_config(page_title="Калькулятор углеводородов", page_icon="🧪", layout="centered")
 else:
-    st.set_page_config(
-        page_title="Калькулятор свойств углеводородов",
-        page_icon="🧪",
-        layout="wide"
-    )
+    st.set_page_config(page_title="Калькулятор свойств углеводородов", page_icon="🧪", layout="wide")
 
-# Инициализация сессионных переменных
 SESSION_KEYS = [
     'logged_in', 'user_name', 'user_workshop', 'show_report',
-    'result_PR', 'result_GERG', 'T_C', 'P_MPa', 'method',
+    'result', 'T_C', 'P_MPa',
     'components', 'input_type', 'user_sensor', 'quote_shown',
     'report_filename', 'report_text', 'components_input', 'phase_type'
 ]
@@ -521,13 +463,13 @@ for key in SESSION_KEYS:
     if key not in st.session_state:
         if key == 'logged_in':
             st.session_state.logged_in = False
-        elif key in ['user_name', 'user_workshop', 'user_sensor', 'method', 'input_type', 'phase_type']:
-            st.session_state[key] = '' if key in ['user_name', 'user_workshop', 'user_sensor'] else 'Сравнение методов'
+        elif key in ['user_name', 'user_workshop', 'user_sensor', 'input_type', 'phase_type']:
+            st.session_state[key] = '' if key in ['user_name', 'user_workshop', 'user_sensor'] else 'Мольные'
             if key == 'input_type':
                 st.session_state.input_type = 'Мольные'
             if key == 'phase_type':
                 st.session_state.phase_type = 'Газ'
-        elif key in ['result_PR', 'result_GERG', 'T_C', 'P_MPa']:
+        elif key in ['result', 'T_C', 'P_MPa']:
             st.session_state[key] = None
         elif key in ['components', 'components_input']:
             st.session_state[key] = {}
@@ -554,7 +496,7 @@ with col_title:
         st.markdown("### Расчет Z, ρ, μ")
     else:
         st.markdown('<h1 class="sci-fi-title">Калькулятор свойств углеводородов</h1>', unsafe_allow_html=True)
-        st.markdown("### Расчет Z-фактора, плотности и вязкости газовых смесей")
+        st.markdown("### Расчет Z-фактора, плотности и вязкости (Пенга-Робинсон)")
 
 with col_logout:
     st.write("")
@@ -575,15 +517,11 @@ with col_theme:
 
 st.caption(f"Пользователь: {st.session_state.user_name} | {st.session_state.user_workshop}")
 
-# Отображение цитаты
 if not st.session_state.quote_shown:
     quote_text, quote_author = get_random_quote()
     if MOBILE and len(quote_text) > 80:
         quote_text = quote_text[:77] + "..."
-    st.markdown(
-        f'<div class="quote">«{quote_text}»<span class="quote-author">— {quote_author}</span></div>',
-        unsafe_allow_html=True
-    )
+    st.markdown(f'<div class="quote">«{quote_text}»<span class="quote-author">— {quote_author}</span></div>', unsafe_allow_html=True)
     st.session_state.quote_shown = True
 
 @st.cache_resource
@@ -592,23 +530,17 @@ def get_calculator():
 
 calculator = get_calculator()
 
-# Молекулярные массы для пересчета
 MW_MAP = {
     'helium': 4.003, 'hydrogen': 2.016, 'oxygen': 32.000,
     'nitrogen': 28.013, 'co2': 44.010,
     'methane': 16.043, 'ethane': 30.070, 'propane': 44.097,
     'n-butane': 58.123, 'i-butane': 58.123,
     'n-pentane': 72.151, 'i-pentane': 72.151,
-    'benzene': 78.114,
-    'toluene': 92.141,
+    'benzene': 78.114, 'toluene': 92.141,
     'hexane': 86.178, 'heptane': 100.205,
     'octane': 114.232, 'nonane': 128.259, 'decane': 142.286,
     'c6plus': 100.000
 }
-
-# ============================================================
-# РАЗДЕЛЕНИЕ НА КОЛОНКИ (АДАПТАЦИЯ ПОД ТЕЛЕФОН)
-# ============================================================
 
 if MOBILE:
     col1 = st.container()
@@ -627,17 +559,8 @@ with col1:
         T_C = st.number_input("Температура (°C)", value=35.0, min_value=-50.0, max_value=150.0, step=1.0)
         P_MPa = st.number_input("Давление (МПа)", value=2.5, min_value=0.001, max_value=10.0, step=0.1)
         
-        # --- ВЫБОР ФАЗЫ ---
-        phase_type = st.radio(
-            "Фаза:",
-            ["Газ", "Жидкость"],
-            index=0 if st.session_state.phase_type == "Газ" else 1,
-            help="Выберите агрегатное состояние смеси"
-        )
+        phase_type = st.radio("Фаза:", ["Газ", "Жидкость"], index=0 if st.session_state.phase_type == "Газ" else 1)
         st.session_state.phase_type = phase_type
-    
-    with st.expander("Метод расчета", expanded=True):
-        method = st.selectbox("Выберите метод:", ["Пенга-Робинсон", "GERG-2008", "Сравнение методов"])
     
     with st.expander("Тип долей", expanded=True):
         input_type = st.radio("Тип данных:", ["Мольные", "Массовые"], index=0)
@@ -646,7 +569,6 @@ with col1:
     
     with st.expander("Состав смеси", expanded=not MOBILE):
         st.markdown(f"**{input_type} доли компонентов:**")
-        st.markdown("*Сумма = 100%*")
         
         component_order = [
             ('helium', 'Гелий'), ('hydrogen', 'Водород'), ('oxygen', 'Кислород'),
@@ -689,7 +611,6 @@ with col1:
             else:
                 col = comp_col3 if comp_col3 is not None else comp_col1
             
-            # Читаем значение из session_state
             session_key = f"comp_{key}_{input_type}"
             if session_key in st.session_state:
                 value = st.session_state[session_key]
@@ -697,32 +618,67 @@ with col1:
                 value = default_values[key]
             
             components_input[key] = col.number_input(
-                display_name,
-                value=value,
-                min_value=0.0,
-                max_value=100.0,
-                step=0.1,
+                display_name, value=value, min_value=0.0, max_value=100.0, step=0.1,
                 key=session_key
             )
         
-        # ---- АВТОМАТИЧЕСКАЯ РАЗБИВКА C6+ ----
+        # ---- АВТОРАЗБИВКА C6+ ----
         c6plus_value = components_input.get('c6plus', 0)
-        
         if c6plus_value > 0:
             heavy_sum = sum(components_input.get(k, 0) for k in ['hexane', 'heptane', 'octane', 'nonane', 'decane'])
-            
-            # Если разбивка не заполнена или сильно отличается
             if heavy_sum == 0 or abs(c6plus_value - heavy_sum) > 0.1:
                 coeffs = [0.7, 0.5, 0.35, 0.2, 0.15]
                 total_coeff = sum(coeffs)
                 normalized_coeffs = [c / total_coeff for c in coeffs]
-                
                 fractions = ['hexane', 'heptane', 'octane', 'nonane', 'decane']
                 for i, key in enumerate(fractions):
                     if i < len(normalized_coeffs):
                         new_value = c6plus_value * normalized_coeffs[i]
                         st.session_state[f"comp_{key}_{input_type}"] = new_value
                         components_input[key] = new_value
+        
+        st.markdown("---")
+        st.markdown("**🎯 Быстрый выбор чистой среды:**")
+        
+        col_pure1, col_pure2, col_pure3 = st.columns(3)
+        
+        if col_pure1.button("Метан", use_container_width=True):
+            for k in components_input:
+                st.session_state[f"comp_{k}_{input_type}"] = 0
+            st.session_state[f"comp_methane_{input_type}"] = 100.0
+            st.rerun()
+        
+        if col_pure2.button("Этан", use_container_width=True):
+            for k in components_input:
+                st.session_state[f"comp_{k}_{input_type}"] = 0
+            st.session_state[f"comp_ethane_{input_type}"] = 100.0
+            st.rerun()
+        
+        if col_pure3.button("Пропан", use_container_width=True):
+            for k in components_input:
+                st.session_state[f"comp_{k}_{input_type}"] = 0
+            st.session_state[f"comp_propane_{input_type}"] = 100.0
+            st.rerun()
+        
+        col_pure4, col_pure5, col_pure6 = st.columns(3)
+        
+        if col_pure4.button("Азот", use_container_width=True):
+            for k in components_input:
+                st.session_state[f"comp_{k}_{input_type}"] = 0
+            st.session_state[f"comp_nitrogen_{input_type}"] = 100.0
+            st.rerun()
+        
+        if col_pure5.button("CO₂", use_container_width=True):
+            for k in components_input:
+                st.session_state[f"comp_{k}_{input_type}"] = 0
+            st.session_state[f"comp_co2_{input_type}"] = 100.0
+            st.rerun()
+        
+        if col_pure6.button("н-Бутан", use_container_width=True):
+            for k in components_input:
+                st.session_state[f"comp_{k}_{input_type}"] = 0
+            st.session_state[f"comp_n-butane_{input_type}"] = 100.0
+            st.rerun()
         
         st.markdown("---")
         
@@ -737,8 +693,7 @@ with col1:
                     'n-butane': 0.0, 'i-butane': 0.0,
                     'n-pentane': 0.0, 'i-pentane': 0.0,
                     'c6plus': 0.0,
-                    'benzene': 0.0,
-                    'toluene': 0.0,
+                    'benzene': 0.0, 'toluene': 0.0,
                     'hexane': 0.0, 'heptane': 0.0, 'octane': 0.0,
                     'nonane': 0.0, 'decane': 0.0
                 }
@@ -747,8 +702,8 @@ with col1:
                 st.rerun()
         
         with col_btn2:
-            if st.button("Сбросить разбивку", use_container_width=True):
-                for key in ['hexane', 'heptane', 'octane', 'nonane', 'decane']:
+            if st.button("Сбросить всё", use_container_width=True):
+                for key in components_input:
                     st.session_state[f"comp_{key}_{input_type}"] = 0
                 st.rerun()
         
@@ -783,8 +738,7 @@ with col1:
             'methane': 'methane', 'ethane': 'ethane', 'propane': 'propane',
             'n-butane': 'n-butane', 'i-butane': 'i-butane',
             'n-pentane': 'n-pentane', 'i-pentane': 'i-pentane',
-            'benzene': 'benzene',
-            'toluene': 'toluene',
+            'benzene': 'benzene', 'toluene': 'toluene',
             'hexane': 'hexane', 'heptane': 'heptane',
             'octane': 'octane', 'nonane': 'nonane', 'decane': 'decane'
         }
@@ -795,19 +749,6 @@ with col1:
         else:
             components_for_calc = components_input
             components_display = components_input
-        
-        # ---- ПРОВЕРКА C6+ РАЗБИВКИ ----
-        c6plus_value = components_input.get('c6plus', 0)
-        heavy_sum = sum(components_input.get(k, 0) for k in ['hexane', 'heptane', 'octane', 'nonane', 'decane'])
-        
-        if c6plus_value > 0 and heavy_sum == 0:
-            st.error(f"❌ Вы ввели C6+ = {c6plus_value}%, но не заполнили разбивку C6-C10!")
-            st.info("💡 Используйте кнопку 'Сбросить разбивку' и введите C6+ заново")
-            st.stop()
-        elif c6plus_value > 0 and abs(c6plus_value - heavy_sum) > 0.01:
-            st.error(f"❌ C6+ = {c6plus_value}%, а сумма C6-C10 = {heavy_sum}%")
-            st.info("💡 Используйте кнопку 'Сбросить разбивку' и введите C6+ заново")
-            st.stop()
         
         for key, value in components_for_calc.items():
             if key != 'c6plus' and value > 0:
@@ -822,41 +763,29 @@ with col1:
         try:
             st.session_state.input_type = input_type
             
-            # ---- ПЕРЕДАЕМ ФАЗУ В КАЛЬКУЛЯТОР ----
-            calc_PR = SHFLUCalculator(method='PR', phase=phase_type)
-            calc_PR.set_composition(comp_names, zs)
-            calc_PR.set_conditions(T_C, P_MPa)
-            result_PR = calc_PR.calculate()
+            calc = SHFLUCalculator(method='PR', phase=phase_type)
+            calc.set_composition(comp_names, zs)
+            calc.set_conditions(T_C, P_MPa)
+            result = calc.calculate()
             
-            calc_GERG = SHFLUCalculator(method='GERG', phase=phase_type)
-            calc_GERG.set_composition(comp_names, zs)
-            calc_GERG.set_conditions(T_C, P_MPa)
-            result_GERG = calc_GERG.calculate()
-            
-            st.session_state.result_PR = result_PR
-            st.session_state.result_GERG = result_GERG
+            st.session_state.result = result
             st.session_state.T_C = T_C
             st.session_state.P_MPa = P_MPa
-            st.session_state.method = method
             st.session_state.components = components_display
             st.session_state.components_input = components_input
             
             st.success("✅ Расчет выполнен")
             
             os.makedirs("reports", exist_ok=True)
-            
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"reports/protokol_{timestamp}_{st.session_state.user_sensor}.txt"
             
             report_text = generate_report(
-                result_PR, result_GERG, components_display,
-                T_C, P_MPa, method,
+                result, components_display, T_C, P_MPa,
                 st.session_state.user_name,
                 st.session_state.user_workshop,
                 st.session_state.user_sensor,
-                input_type,
-                phase_type,
-                components_input
+                input_type, phase_type
             )
             
             with open(filename, 'w', encoding='utf-8') as f:
@@ -866,26 +795,24 @@ with col1:
             st.session_state.report_text = report_text
             st.session_state.show_report = True
             
-            st.success("✅ Протокол сохранен локально")
+            st.success("✅ Протокол сохранен")
             
-            # ---- АВТООТПРАВКА НА ПОЧТУ ----
             try:
                 success, message = send_protocol_by_email(
                     report_text,
                     st.session_state.user_name,
                     st.session_state.user_workshop,
                     st.session_state.user_sensor,
-                    T_C,
-                    P_MPa,
+                    T_C, P_MPa,
                     f"protokol_{timestamp}_{st.session_state.user_sensor}.txt"
                 )
                 if success:
-                    st.info("📧 Протокол отправлен на почту Mail.ru")
+                    st.info("📧 Протокол отправлен на почту")
                 else:
                     st.warning(message)
             except Exception as e:
-                st.warning(f"⚠️ Протокол не отправлен на почту: {str(e)}")
-            
+                st.warning(f"⚠️ Протокол не отправлен: {str(e)}")
+        
         except Exception as e:
             st.error(f"❌ Ошибка: {str(e)}")
 
@@ -897,32 +824,21 @@ if col2 is not None:
     with col2:
         st.header("Результаты")
         
-        if st.session_state.result_PR is not None and st.session_state.result_GERG is not None:
-            result_PR = st.session_state.result_PR
-            result_GERG = st.session_state.result_GERG
-            method = st.session_state.method
-            input_type = st.session_state.get('input_type', 'Мольные')
+        if st.session_state.result is not None:
+            result = st.session_state.result
             phase_type = st.session_state.get('phase_type', 'Газ')
+            input_type = st.session_state.get('input_type', 'Мольные')
             
-            # ---- ОТОБРАЖЕНИЕ МЕТОДА С УЧЕТОМ PYAGA8 ----
-            if method == "Пенга-Робинсон":
-                result = result_PR
-                method_name = result.get('method', 'Пенга-Робинсон')
-                st.info(f"📘 Метод: {method_name} ({phase_type})")
-            elif method == "GERG-2008":
-                result = result_GERG
-                method_name = result.get('method', 'GERG-2008')
-                st.info(f"📗 Метод: {method_name} ({phase_type})")
-            else:
-                result = None
-                st.info("📊 Сравнение методов")
+            method_name = result.get('method', 'Пенга-Робинсон')
+            st.info(f"📘 Метод: {method_name} ({phase_type})")
             
-            # ---- ПРЕДУПРЕЖДЕНИЕ (если есть) ----
-            if result and result.get('warning'):
+            if result.get('warning'):
                 st.warning(f"⚠️ {result['warning']}")
             
             type_label = "Массовые" if input_type == "Массовые" else "Мольные"
-            st.caption(f"Тип долей: {type_label} | Фаза: {phase_type}")
+            is_pure = result.get('is_pure', False)
+            pure_label = " | 🎯 Чистая среда" if is_pure else ""
+            st.caption(f"Тип долей: {type_label} | Фаза: {phase_type}{pure_label}")
             
             with st.expander("Основные параметры", expanded=True):
                 if MOBILE:
@@ -936,37 +852,32 @@ if col2 is not None:
                 with col_met2:
                     st.metric("P", f"{st.session_state.P_MPa:.3f} МПа")
                 with col_met3:
-                    st.metric("M", f"{result_PR['MW']:.3f} кг/кмоль")
+                    st.metric("M", f"{result['MW']:.3f} кг/кмоль")
             
-            if result and result.get('success', False):
+            if result.get('success', False):
                 with st.expander("Результаты расчета", expanded=True):
                     col_z, col_rho = st.columns(2)
                     
-                    # ---- Z-ФАКТОР (С ПРОВЕРКОЙ) ----
                     with col_z:
                         Z = result.get('Z')
                         if Z is not None:
                             st.metric("Z-фактор", f"{Z:.6f}")
                         else:
                             st.metric("Z-фактор", "—")
-                            st.caption("⚠️ Расчет Z-фактора не выполнен")
+                            st.caption("⚠️ Не рассчитан")
                     
-                    # ---- ПЛОТНОСТЬ ----
                     with col_rho:
                         if result.get('rho_gas') is not None:
                             st.metric("Плотность (газ)", f"{result['rho_gas']:.3f} кг/м³")
                         elif result.get('rho_liquid') is not None:
                             st.metric("Плотность (жидк)", f"{result['rho_liquid']:.3f} кг/м³")
-                        elif result.get('rho') is not None:
-                            st.metric("Плотность", f"{result['rho']:.3f} кг/м³")
                         else:
                             st.metric("Плотность", "—")
                     
-                    # ---- ВЯЗКОСТЬ ----
                     mu = result.get('mu_dynamic')
                     if mu is not None:
                         mu_cP = mu * 1000
-                        rho_for_nu = result.get('rho_gas') or result.get('rho_liquid') or result.get('rho') or 1.0
+                        rho_for_nu = result.get('rho_gas') or result.get('rho_liquid') or 1.0
                         nu_cSt = (mu / rho_for_nu) * 1e6
                         
                         col_visc1, col_visc2 = st.columns(2)
@@ -974,43 +885,8 @@ if col2 is not None:
                             st.metric("Динамическая вязкость", f"{mu_cP:.4f} сП")
                         with col_visc2:
                             st.metric("Кинематическая вязкость", f"{nu_cSt:.4f} сСт")
-                    else:
-                        st.info("ℹ️ Вязкость не рассчитана")
             else:
-                # ---- ЕСЛИ РАСЧЕТ НЕ УДАЛСЯ ----
                 st.error(f"❌ Ошибка расчета: {result.get('error', 'Неизвестная ошибка')}")
-                if result.get('Z') is None:
-                    st.info("💡 Z-фактор не рассчитан. Проверьте состав и условия.")
-            
-            # ---- СРАВНЕНИЕ МЕТОДОВ ----
-            if method == "Сравнение методов":
-                with st.expander("Сравнение методов", expanded=True):
-                    if result_PR.get('success', False) and result_GERG.get('success', False):
-                        Z_PR = result_PR.get('Z')
-                        Z_GERG = result_GERG.get('Z')
-                        
-                        if Z_PR is not None and Z_GERG is not None and Z_GERG > 0:
-                            diff = abs(Z_PR - Z_GERG) / Z_GERG * 100
-                            diff_str = f"{diff:.3f}%"
-                        else:
-                            diff_str = "— (ошибка)"
-                        
-                        if MOBILE:
-                            col_comp1, col_comp2 = st.columns(2)
-                            col_comp3 = st.columns(1)[0]
-                        else:
-                            col_comp1, col_comp2, col_comp3 = st.columns(3)
-                        
-                        with col_comp1:
-                            Z_display = f"{Z_PR:.6f}" if Z_PR is not None else "—"
-                            method_name = result_PR.get('method', 'Пенга-Робинсон')
-                            st.metric(method_name, Z_display)
-                        with col_comp2:
-                            Z_display = f"{Z_GERG:.6f}" if Z_GERG is not None else "—"
-                            method_name = result_GERG.get('method', 'GERG-2008')
-                            st.metric(method_name, Z_display)
-                        with col_comp3:
-                            st.metric("Разница", diff_str)
             
             with st.expander("Данные пользователя", expanded=False):
                 st.text(f"ФИО: {st.session_state.user_name}")
@@ -1074,7 +950,7 @@ st.markdown(f"""
     <div class="group">ООО «ИЗП» · Группа моделирования технологических процессов</div>
     <div class="lead">под руководством Клепцова Д.В.</div>
     <div style="margin-top:10px; font-size:12px; color:#95a5a6;">
-        Python · Streamlit · Peng-Robinson · GERG-2008 (CoolProp / pyaga8)<br>
+        Python · Streamlit · Peng-Robinson<br>
         Расчетная точность: 99.8%
     </div>
 </div>
