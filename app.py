@@ -307,7 +307,7 @@ MOBILE = is_mobile()
 
 def generate_report(result, components, T_C, P_MPa,
                    user_name, user_workshop, user_sensor, input_type, phase_type):
-    """Формирует текстовый протокол (только Пенга-Робинсон)"""
+    """Формирует текстовый протокол"""
     
     display_names = {
         'helium': 'Гелий', 'hydrogen': 'Водород', 'oxygen': 'Кислород',
@@ -456,7 +456,8 @@ SESSION_KEYS = [
     'logged_in', 'user_name', 'user_workshop', 'show_report',
     'result', 'T_C', 'P_MPa',
     'components', 'input_type', 'user_sensor', 'quote_shown',
-    'report_filename', 'report_text', 'components_input', 'phase_type'
+    'report_filename', 'report_text', 'components_input', 'phase_type',
+    'pure_component', 'load_example'
 ]
 
 for key in SESSION_KEYS:
@@ -473,6 +474,10 @@ for key in SESSION_KEYS:
             st.session_state[key] = None
         elif key in ['components', 'components_input']:
             st.session_state[key] = {}
+        elif key == 'pure_component':
+            st.session_state.pure_component = None
+        elif key == 'load_example':
+            st.session_state.load_example = False
         else:
             st.session_state[key] = False
 
@@ -596,6 +601,28 @@ with col1:
             'nonane': 0.0, 'decane': 0.0
         }
         
+        # ---- ОБРАБОТКА ЧИСТОЙ СРЕДЫ ----
+        if st.session_state.pure_component:
+            pure_key = st.session_state.pure_component
+            for name, _ in component_order:
+                session_key = f"comp_{name}_{input_type}"
+                if session_key in st.session_state:
+                    del st.session_state[session_key]
+            st.session_state[f"comp_{pure_key}_{input_type}"] = 100.0
+            st.session_state.pure_component = None
+        
+        # ---- ОБРАБОТКА ЗАГРУЗКИ ПРИМЕРА ----
+        if st.session_state.load_example:
+            st.session_state.load_example = False
+            for name, _ in component_order:
+                session_key = f"comp_{name}_{input_type}"
+                if session_key in st.session_state:
+                    del st.session_state[session_key]
+            st.session_state[f"comp_nitrogen_{input_type}"] = 3.0
+            st.session_state[f"comp_methane_{input_type}"] = 80.0
+            st.session_state[f"comp_ethane_{input_type}"] = 12.0
+            st.session_state[f"comp_propane_{input_type}"] = 5.0
+        
         if MOBILE:
             comp_col1, comp_col2 = st.columns(2)
             comp_col3 = None
@@ -643,41 +670,29 @@ with col1:
         col_pure1, col_pure2, col_pure3 = st.columns(3)
         
         if col_pure1.button("Метан", use_container_width=True):
-            for k in components_input:
-                st.session_state[f"comp_{k}_{input_type}"] = 0
-            st.session_state[f"comp_methane_{input_type}"] = 100.0
+            st.session_state.pure_component = 'methane'
             st.rerun()
         
         if col_pure2.button("Этан", use_container_width=True):
-            for k in components_input:
-                st.session_state[f"comp_{k}_{input_type}"] = 0
-            st.session_state[f"comp_ethane_{input_type}"] = 100.0
+            st.session_state.pure_component = 'ethane'
             st.rerun()
         
         if col_pure3.button("Пропан", use_container_width=True):
-            for k in components_input:
-                st.session_state[f"comp_{k}_{input_type}"] = 0
-            st.session_state[f"comp_propane_{input_type}"] = 100.0
+            st.session_state.pure_component = 'propane'
             st.rerun()
         
         col_pure4, col_pure5, col_pure6 = st.columns(3)
         
         if col_pure4.button("Азот", use_container_width=True):
-            for k in components_input:
-                st.session_state[f"comp_{k}_{input_type}"] = 0
-            st.session_state[f"comp_nitrogen_{input_type}"] = 100.0
+            st.session_state.pure_component = 'nitrogen'
             st.rerun()
         
         if col_pure5.button("CO₂", use_container_width=True):
-            for k in components_input:
-                st.session_state[f"comp_{k}_{input_type}"] = 0
-            st.session_state[f"comp_co2_{input_type}"] = 100.0
+            st.session_state.pure_component = 'co2'
             st.rerun()
         
         if col_pure6.button("н-Бутан", use_container_width=True):
-            for k in components_input:
-                st.session_state[f"comp_{k}_{input_type}"] = 0
-            st.session_state[f"comp_n-butane_{input_type}"] = 100.0
+            st.session_state.pure_component = 'n-butane'
             st.rerun()
         
         st.markdown("---")
@@ -686,25 +701,16 @@ with col1:
         
         with col_btn1:
             if st.button("Загрузить пример", use_container_width=True):
-                example = {
-                    'helium': 0.0, 'hydrogen': 0.0, 'oxygen': 0.0,
-                    'nitrogen': 3.0, 'co2': 0.0,
-                    'methane': 80.0, 'ethane': 12.0, 'propane': 5.0,
-                    'n-butane': 0.0, 'i-butane': 0.0,
-                    'n-pentane': 0.0, 'i-pentane': 0.0,
-                    'c6plus': 0.0,
-                    'benzene': 0.0, 'toluene': 0.0,
-                    'hexane': 0.0, 'heptane': 0.0, 'octane': 0.0,
-                    'nonane': 0.0, 'decane': 0.0
-                }
-                for name, value in example.items():
-                    st.session_state[f"comp_{name}_{input_type}"] = value
+                st.session_state.load_example = True
                 st.rerun()
         
         with col_btn2:
             if st.button("Сбросить всё", use_container_width=True):
-                for key in components_input:
-                    st.session_state[f"comp_{key}_{input_type}"] = 0
+                for name, _ in component_order:
+                    session_key = f"comp_{name}_{input_type}"
+                    if session_key in st.session_state:
+                        del st.session_state[session_key]
+                st.session_state.pure_component = None
                 st.rerun()
         
         total = sum(components_input.values())
