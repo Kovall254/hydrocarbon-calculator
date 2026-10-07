@@ -1,5 +1,5 @@
 # ============================================================
-# МОДУЛЬ: app.py (ОСНОВНОЙ КАЛЬКУЛЯТОР — ТОЛЬКО ПЕНГА-РОБИНСОН)
+# МОДУЛЬ: app.py (КАЛЬКУЛЯТОР + ГРАФИКИ)
 # ============================================================
 
 import streamlit as st
@@ -340,12 +340,10 @@ def generate_report(result, components, T_C, P_MPa,
     Z_str = f"{Z:.6f}" if Z is not None else "— (ошибка)"
     
     type_label = "Массовые" if input_type == "Массовые" else "Мольные"
-    
     is_pure = result.get('is_pure', False)
     pure_label = "Да" if is_pure else "Нет"
     
     quote_text, quote_author = get_random_quote()
-    
     warning = result.get('warning', '')
     warning_text = f"  ⚠️ {warning}\n" if warning else "  ✅ Ошибок не обнаружено\n"
     
@@ -457,7 +455,7 @@ SESSION_KEYS = [
     'result', 'T_C', 'P_MPa',
     'components', 'input_type', 'user_sensor', 'quote_shown',
     'report_filename', 'report_text', 'components_input', 'phase_type',
-    'pure_component', 'load_example'
+    'pure_component', 'load_example', 'chart_data', 'comp_names', 'zs_for_chart'
 ]
 
 for key in SESSION_KEYS:
@@ -478,6 +476,10 @@ for key in SESSION_KEYS:
             st.session_state.pure_component = None
         elif key == 'load_example':
             st.session_state.load_example = False
+        elif key == 'chart_data':
+            st.session_state.chart_data = None
+        elif key in ['comp_names', 'zs_for_chart']:
+            st.session_state[key] = []
         else:
             st.session_state[key] = False
 
@@ -601,7 +603,6 @@ with col1:
             'nonane': 0.0, 'decane': 0.0
         }
         
-        # ---- ОБРАБОТКА ЧИСТОЙ СРЕДЫ ----
         if st.session_state.pure_component:
             pure_key = st.session_state.pure_component
             for name, _ in component_order:
@@ -611,7 +612,6 @@ with col1:
             st.session_state[f"comp_{pure_key}_{input_type}"] = 100.0
             st.session_state.pure_component = None
         
-        # ---- ОБРАБОТКА ЗАГРУЗКИ ПРИМЕРА ----
         if st.session_state.load_example:
             st.session_state.load_example = False
             for name, _ in component_order:
@@ -649,7 +649,6 @@ with col1:
                 key=session_key
             )
         
-        # ---- АВТОРАЗБИВКА C6+ ----
         c6plus_value = components_input.get('c6plus', 0)
         if c6plus_value > 0:
             heavy_sum = sum(components_input.get(k, 0) for k in ['hexane', 'heptane', 'octane', 'nonane', 'decane'])
@@ -779,6 +778,9 @@ with col1:
             st.session_state.P_MPa = P_MPa
             st.session_state.components = components_display
             st.session_state.components_input = components_input
+            st.session_state.comp_names = comp_names
+            st.session_state.zs_for_chart = zs
+            st.session_state.chart_data = {'comp_names': comp_names, 'zs': zs}
             
             st.success("✅ Расчет выполнен")
             
@@ -823,7 +825,7 @@ with col1:
             st.error(f"❌ Ошибка: {str(e)}")
 
 # ============================================================
-# БЛОК 11: ПРАВАЯ КОЛОНКА — РЕЗУЛЬТАТЫ
+# БЛОК 11: ПРАВАЯ КОЛОНКА — РЕЗУЛЬТАТЫ И ГРАФИКИ
 # ============================================================
 
 if col2 is not None:
@@ -894,6 +896,195 @@ if col2 is not None:
             else:
                 st.error(f"❌ Ошибка расчета: {result.get('error', 'Неизвестная ошибка')}")
             
+            # ============================================================
+            # ГРАФИКИ ЗАВИСИМОСТЕЙ
+            # ============================================================
+            
+            with st.expander("📊 Графики зависимостей", expanded=False):
+                
+                comp_names_chart = st.session_state.get('comp_names', [])
+                zs_chart = st.session_state.get('zs_for_chart', [])
+                
+                if not comp_names_chart or not zs_chart:
+                    st.warning("Нет данных для построения графиков. Сначала выполните расчет.")
+                else:
+                    chart_type = st.selectbox(
+                        "Выберите тип графика:",
+                        [
+                            "Z-фактор от давления (T = const)",
+                            "Плотность от температуры (P = const)",
+                            "Вязкость от температуры (P = const)",
+                            "Вязкость от давления (T = const)"
+                        ],
+                        key="chart_type_select"
+                    )
+                    
+                    T_C_base = st.session_state.T_C
+                    P_MPa_base = st.session_state.P_MPa
+                    phase_for_chart = st.session_state.get('phase_type', 'Газ')
+                    
+                    # ---- ГРАФИК 1: Z-фактор от давления ----
+                    if chart_type == "Z-фактор от давления (T = const)":
+                        st.markdown(f"**Зависимость Z-фактора от давления при T = {T_C_base}°C**")
+                        
+                        pressures = [0.1, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+                        Z_values = []
+                        
+                        progress_bar = st.progress(0)
+                        for i, P in enumerate(pressures):
+                            try:
+                                calc = SHFLUCalculator(method='PR', phase=phase_for_chart)
+                                calc.set_composition(comp_names_chart, zs_chart)
+                                calc.set_conditions(T_C_base, P)
+                                res = calc.calculate()
+                                Z_val = res.get('Z')
+                                if Z_val is not None and Z_val > 0:
+                                    Z_values.append(Z_val)
+                                else:
+                                    Z_values.append(None)
+                            except:
+                                Z_values.append(None)
+                            progress_bar.progress((i + 1) / len(pressures))
+                        progress_bar.empty()
+                        
+                        valid_data = [(P, Z) for P, Z in zip(pressures, Z_values) if Z is not None]
+                        if valid_data:
+                            P_plot, Z_plot = zip(*valid_data)
+                            
+                            fig, ax = plt.subplots(figsize=(10, 5))
+                            ax.plot(P_plot, Z_plot, 'b-o', linewidth=2, markersize=6)
+                            ax.axvline(x=P_MPa_base, color='r', linestyle='--', alpha=0.5, label=f'Текущее P = {P_MPa_base} МПа')
+                            ax.axhline(y=1.0, color='gray', linestyle=':', alpha=0.5, label='Идеальный газ (Z=1)')
+                            ax.set_xlabel('Давление, МПа', fontsize=12)
+                            ax.set_ylabel('Z-фактор', fontsize=12)
+                            ax.set_title(f'Z-фактор от давления (T = {T_C_base}°C, фаза: {phase_for_chart})', fontsize=13)
+                            ax.grid(True, alpha=0.3)
+                            ax.legend()
+                            st.pyplot(fig)
+                        else:
+                            st.warning("Не удалось построить график")
+                    
+                    # ---- ГРАФИК 2: Плотность от температуры ----
+                    elif chart_type == "Плотность от температуры (P = const)":
+                        st.markdown(f"**Зависимость плотности от температуры при P = {P_MPa_base} МПа**")
+                        
+                        temperatures = [-20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 150]
+                        rho_values = []
+                        
+                        progress_bar = st.progress(0)
+                        for i, T in enumerate(temperatures):
+                            try:
+                                calc = SHFLUCalculator(method='PR', phase=phase_for_chart)
+                                calc.set_composition(comp_names_chart, zs_chart)
+                                calc.set_conditions(T, P_MPa_base)
+                                res = calc.calculate()
+                                rho = res.get('rho_gas') or res.get('rho_liquid') or res.get('rho')
+                                if rho is not None and rho > 0:
+                                    rho_values.append(rho)
+                                else:
+                                    rho_values.append(None)
+                            except:
+                                rho_values.append(None)
+                            progress_bar.progress((i + 1) / len(temperatures))
+                        progress_bar.empty()
+                        
+                        valid_data = [(T, rho) for T, rho in zip(temperatures, rho_values) if rho is not None]
+                        if valid_data:
+                            T_plot, rho_plot = zip(*valid_data)
+                            
+                            fig, ax = plt.subplots(figsize=(10, 5))
+                            ax.plot(T_plot, rho_plot, 'g-o', linewidth=2, markersize=6)
+                            ax.axvline(x=T_C_base, color='r', linestyle='--', alpha=0.5, label=f'Текущая T = {T_C_base}°C')
+                            ax.set_xlabel('Температура, °C', fontsize=12)
+                            ax.set_ylabel('Плотность, кг/м³', fontsize=12)
+                            ax.set_title(f'Плотность от температуры (P = {P_MPa_base} МПа, фаза: {phase_for_chart})', fontsize=13)
+                            ax.grid(True, alpha=0.3)
+                            ax.legend()
+                            st.pyplot(fig)
+                        else:
+                            st.warning("Не удалось построить график")
+                    
+                    # ---- ГРАФИК 3: Вязкость от температуры ----
+                    elif chart_type == "Вязкость от температуры (P = const)":
+                        st.markdown(f"**Зависимость вязкости от температуры при P = {P_MPa_base} МПа**")
+                        
+                        temperatures = [-20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 150]
+                        mu_values = []
+                        
+                        progress_bar = st.progress(0)
+                        for i, T in enumerate(temperatures):
+                            try:
+                                calc = SHFLUCalculator(method='PR', phase=phase_for_chart)
+                                calc.set_composition(comp_names_chart, zs_chart)
+                                calc.set_conditions(T, P_MPa_base)
+                                res = calc.calculate()
+                                mu = res.get('mu_dynamic')
+                                if mu is not None and mu > 0:
+                                    mu_values.append(mu * 1000)
+                                else:
+                                    mu_values.append(None)
+                            except:
+                                mu_values.append(None)
+                            progress_bar.progress((i + 1) / len(temperatures))
+                        progress_bar.empty()
+                        
+                        valid_data = [(T, mu) for T, mu in zip(temperatures, mu_values) if mu is not None]
+                        if valid_data:
+                            T_plot, mu_plot = zip(*valid_data)
+                            
+                            fig, ax = plt.subplots(figsize=(10, 5))
+                            ax.plot(T_plot, mu_plot, 'm-o', linewidth=2, markersize=6)
+                            ax.axvline(x=T_C_base, color='r', linestyle='--', alpha=0.5, label=f'Текущая T = {T_C_base}°C')
+                            ax.set_xlabel('Температура, °C', fontsize=12)
+                            ax.set_ylabel('Динамическая вязкость, сП', fontsize=12)
+                            ax.set_title(f'Вязкость от температуры (P = {P_MPa_base} МПа, фаза: {phase_for_chart})', fontsize=13)
+                            ax.grid(True, alpha=0.3)
+                            ax.legend()
+                            st.pyplot(fig)
+                        else:
+                            st.warning("Не удалось построить график")
+                    
+                    # ---- ГРАФИК 4: Вязкость от давления ----
+                    elif chart_type == "Вязкость от давления (T = const)":
+                        st.markdown(f"**Зависимость вязкости от давления при T = {T_C_base}°C**")
+                        
+                        pressures = [0.1, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+                        mu_values = []
+                        
+                        progress_bar = st.progress(0)
+                        for i, P in enumerate(pressures):
+                            try:
+                                calc = SHFLUCalculator(method='PR', phase=phase_for_chart)
+                                calc.set_composition(comp_names_chart, zs_chart)
+                                calc.set_conditions(T_C_base, P)
+                                res = calc.calculate()
+                                mu = res.get('mu_dynamic')
+                                if mu is not None and mu > 0:
+                                    mu_values.append(mu * 1000)
+                                else:
+                                    mu_values.append(None)
+                            except:
+                                mu_values.append(None)
+                            progress_bar.progress((i + 1) / len(pressures))
+                        progress_bar.empty()
+                        
+                        valid_data = [(P, mu) for P, mu in zip(pressures, mu_values) if mu is not None]
+                        if valid_data:
+                            P_plot, mu_plot = zip(*valid_data)
+                            
+                            fig, ax = plt.subplots(figsize=(10, 5))
+                            ax.plot(P_plot, mu_plot, 'c-o', linewidth=2, markersize=6)
+                            ax.axvline(x=P_MPa_base, color='r', linestyle='--', alpha=0.5, label=f'Текущее P = {P_MPa_base} МПа')
+                            ax.set_xlabel('Давление, МПа', fontsize=12)
+                            ax.set_ylabel('Динамическая вязкость, сП', fontsize=12)
+                            ax.set_title(f'Вязкость от давления (T = {T_C_base}°C, фаза: {phase_for_chart})', fontsize=13)
+                            ax.grid(True, alpha=0.3)
+                            ax.legend()
+                            st.pyplot(fig)
+                        else:
+                            st.warning("Не удалось построить график")
+            
+            # ---- Данные пользователя ----
             with st.expander("Данные пользователя", expanded=False):
                 st.text(f"ФИО: {st.session_state.user_name}")
                 st.text(f"Цех: {st.session_state.user_workshop}")
