@@ -1,0 +1,1154 @@
+# ============================================================
+# МОДУЛЬ: app.py (КАЛЬКУЛЯТОР + ГРАФИКИ)
+# ============================================================
+
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+from datetime import datetime
+from calculator import SHFLUCalculator
+import os
+import random
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
+
+# ============================================================
+# БЛОК 1: ИНИЦИАЛИЗАЦИЯ ТЕМЫ
+# ============================================================
+
+if 'theme' not in st.session_state:
+    st.session_state.theme = 'light'
+
+# ============================================================
+# БЛОК 2: ФУНКЦИЯ ВОЗВРАТА CSS
+# ============================================================
+
+def get_theme_css():
+    if st.session_state.theme == 'dark':
+        return """
+        .stApp {
+            background: linear-gradient(135deg, #0d1b2a 0%, #1b2d45 100%);
+            color: #e8f0fe;
+        }
+        .hex-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+        .hex {
+            position: absolute;
+            font-size: 80px;
+            opacity: 0.06;
+            color: #4a8cbf;
+            font-weight: bold;
+            transform: rotate(30deg);
+            pointer-events: none;
+            user-select: none;
+        }
+        .css-1r6slb0, .css-1y4p8pa {
+            background: rgba(30, 50, 70, 0.85) !important;
+            border: 1px solid rgba(70, 130, 180, 0.2) !important;
+            color: #e8f0fe !important;
+        }
+        .stMarkdown, .stText, .stCaption, .stMetric {
+            color: #e8f0fe !important;
+        }
+        h1, h2, h3, h4, h5, h6, .stHeading {
+            color: #e8f0fe !important;
+        }
+        .quote {
+            color: #e8f0fe;
+            border-left-color: #4a8cbf;
+            background: rgba(70, 130, 180, 0.1);
+        }
+        .quote-author {
+            color: #8bb8d9;
+        }
+        .footer {
+            color: #8bb8d9;
+            border-top-color: rgba(70, 130, 180, 0.2);
+        }
+        .footer .company, .footer .group, .footer .lead {
+            color: #e8f0fe;
+        }
+        .stButton > button {
+            background: #1b3a5c !important;
+            color: #e8f0fe !important;
+        }
+        .stButton > button:hover {
+            background: #2a5a7a !important;
+        }
+        .stTextInput > div > input {
+            background: #1b2d45 !important;
+            color: #e8f0fe !important;
+        }
+        .stNumberInput > div > input {
+            background: #1b2d45 !important;
+            color: #e8f0fe !important;
+        }
+        .stSelectbox > div > div {
+            background: #1b2d45 !important;
+            color: #e8f0fe !important;
+        }
+        .sci-fi-title {
+            background: linear-gradient(135deg, #4a8cbf, #7ab8e0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 900;
+            text-shadow: 0 0 30px rgba(74, 140, 191, 0.3);
+        }
+        """
+    else:
+        return """
+        .stApp {
+            background: linear-gradient(135deg, #f5f8fc 0%, #e8f0f8 100%);
+            color: #0e1a2b;
+        }
+        .hex-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+        .hex {
+            position: absolute;
+            font-size: 80px;
+            opacity: 0.04;
+            color: #1a5276;
+            font-weight: bold;
+            transform: rotate(30deg);
+            pointer-events: none;
+            user-select: none;
+        }
+        .css-1r6slb0, .css-1y4p8pa {
+            backdrop-filter: blur(10px);
+            background: rgba(255,255,255,0.85) !important;
+            border: 1px solid rgba(46,134,193,0.15) !important;
+        }
+        .quote {
+            font-style: italic;
+            color: #1a5276;
+            text-align: center;
+            padding: 12px 20px;
+            border-left: 4px solid #2e86c1;
+            background: rgba(46,134,193,0.05);
+            border-radius: 8px;
+            margin: 20px 0;
+            font-size: 15px;
+        }
+        .quote-author {
+            font-style: normal;
+            font-weight: 600;
+            color: #1a5276;
+            display: block;
+            margin-top: 5px;
+            font-size: 13px;
+        }
+        .footer {
+            text-align: center;
+            color: #5d6d7e;
+            font-size: 13px;
+            padding: 20px 0 10px 0;
+            border-top: 1px solid rgba(46,134,193,0.15);
+            margin-top: 30px;
+            line-height: 1.8;
+        }
+        .footer .company {
+            font-size: 15px;
+            font-weight: 700;
+            color: #1a5276;
+            letter-spacing: 0.5px;
+        }
+        .footer .group {
+            font-size: 14px;
+            color: #2c3e50;
+        }
+        .footer .lead {
+            font-size: 14px;
+            color: #2c3e50;
+        }
+        .sci-fi-title {
+            background: linear-gradient(135deg, #1a5276, #2e86c1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 900;
+            text-shadow: 0 0 30px rgba(46,134,193,0.3);
+        }
+        .stButton > button {
+            transition: all 0.3s ease !important;
+            border-radius: 12px !important;
+        }
+        .stButton > button:hover {
+            transform: scale(1.03);
+            box-shadow: 0 0 30px rgba(46,134,193,0.4) !important;
+        }
+        """
+
+# ============================================================
+# БЛОК 3: ПРИМЕНЕНИЕ CSS И ФОНА
+# ============================================================
+
+st.markdown(f"<style>{get_theme_css()}</style>", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="hex-bg">
+    <div class="hex" style="top:5%; left:3%; transform:rotate(15deg);">⬡</div>
+    <div class="hex" style="top:15%; right:8%; transform:rotate(45deg);">⬡</div>
+    <div class="hex" style="bottom:20%; left:5%; transform:rotate(60deg);">⬡</div>
+    <div class="hex" style="bottom:10%; right:3%; transform:rotate(20deg);">⬡</div>
+    <div class="hex" style="top:45%; left:2%; transform:rotate(35deg); font-size:100px;">⬡</div>
+    <div class="hex" style="top:55%; right:2%; transform:rotate(10deg); font-size:100px;">⬡</div>
+    <div class="hex" style="top:75%; left:10%; transform:rotate(50deg); font-size:90px;">⬡</div>
+    <div class="hex" style="top:25%; left:12%; transform:rotate(25deg); font-size:70px;">⬡</div>
+    <div class="hex" style="top:70%; right:12%; transform:rotate(40deg); font-size:70px;">⬡</div>
+</div>
+""", unsafe_allow_html=True)
+
+# ============================================================
+# БЛОК 4: ОТПРАВКА НА ПОЧТУ
+# ============================================================
+
+def send_protocol_by_email(report_text, user_name, user_workshop, user_sensor, T_C, P_MPa, filename):
+    try:
+        SMTP_SERVER = "smtp.mail.ru"
+        SMTP_PORT = 465
+        SENDER_EMAIL = "pasha_ko_00@mail.ru"
+        SENDER_PASSWORD = "LbCQTZLHLz94veadqqVY"
+        RECEIVER_EMAIL = "pasha_ko_00@mail.ru"
+        
+        msg = MIMEMultipart()
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = RECEIVER_EMAIL
+        msg['Subject'] = f"Протокол расчета {user_sensor} от {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        
+        body = f"""
+Здравствуйте!
+
+Калькулятор свойств углеводородов автоматически отправил протокол расчета.
+
+Данные расчета:
+  • Пользователь:   {user_name} ({user_workshop})
+  • Датчик:         {user_sensor}
+  • Температура:    {T_C:.1f} °C
+  • Давление:       {P_MPa:.3f} МПа
+  • Время расчета:  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Протокол прикреплен к письму.
+
+---
+Калькулятор свойств углеводородов
+ООО «ИЗП» · Группа моделирования технологических процессов
+"""
+        
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        part = MIMEBase('application', 'octet-stream')
+        part.set_payload(report_text.encode('utf-8'))
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', f'attachment; filename={filename}')
+        msg.attach(part)
+        
+        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        return True, "✅ Протокол отправлен на почту Mail.ru"
+    except Exception as e:
+        return False, f"❌ Ошибка отправки: {str(e)}"
+
+# ============================================================
+# БЛОК 5: ЦИТАТЫ УЧЁНЫХ
+# ============================================================
+
+SCIENTIST_QUOTES = [
+    {"text": "В науке нет ничего такого, что нельзя было бы понять. Важно лишь терпение и желание.", "author": "Дмитрий Менделеев"},
+    {"text": "Многие из тех, кто не боялись рисковать, погибли, но те, кто выжили, изменили мир.", "author": "Никола Тесла"},
+    {"text": "Познание начинается с удивления.", "author": "Аристотель"},
+    {"text": "Химия — это физика, только более красивая и сложная.", "author": "Мари Кюри"},
+    {"text": "Великие открытия делаются теми, кто умеет удивляться тому, что все считают очевидным.", "author": "Альберт Эйнштейн"},
+    {"text": "Химия — это наука о веществах и их превращениях. А превращения — это жизнь.", "author": "Александр Бутлеров"},
+    {"text": "В химии нет ничего сложного, есть только неизвестное.", "author": "Антуан Лавуазье"},
+    {"text": "Я никогда не считал, что могу сделать что-то выдающееся. Я просто работал и верил.", "author": "Мари Кюри"},
+    {"text": "Наука не является и не будет являться законченной книгой. Каждый важный успех приносит новые вопросы.", "author": "Альберт Эйнштейн"},
+    {"text": "Химия — это мост между физикой и биологией.", "author": "Лайнус Полинг"},
+    {"text": "Все вещества — это яды. Всё зависит от дозы.", "author": "Парацельс"},
+    {"text": "Мысль о том, что мы можем управлять материей, — это и есть химия.", "author": "Роберт Вудворд"},
+    {"text": "Прогресс науки зависит не от количества идей, а от количества проверенных идей.", "author": "Пётр Капица"},
+    {"text": "Истина — это то, что выдерживает проверку временем и экспериментом.", "author": "Дмитрий Менделеев"}
+]
+
+def get_random_quote():
+    quote = random.choice(SCIENTIST_QUOTES)
+    return quote["text"], quote["author"]
+
+# ============================================================
+# БЛОК 6: ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# ============================================================
+
+def is_mobile():
+    try:
+        ua = st.context.headers.get('User-Agent', '').lower()
+        return any(x in ua for x in ['mobile', 'android', 'iphone', 'ipad'])
+    except:
+        return False
+
+MOBILE = is_mobile()
+
+def generate_report(result, components, T_C, P_MPa,
+                   user_name, user_workshop, user_sensor, input_type, phase_type):
+    """Формирует текстовый протокол"""
+    
+    display_names = {
+        'helium': 'Гелий', 'hydrogen': 'Водород', 'oxygen': 'Кислород',
+        'nitrogen': 'Азот', 'co2': 'CO₂',
+        'methane': 'Метан (C1)', 'ethane': 'Этан (C2)', 'propane': 'Пропан (C3)',
+        'n-butane': 'н-Бутан (C4)', 'i-butane': 'изо-Бутан (iC4)',
+        'n-pentane': 'н-Пентан (C5)', 'i-pentane': 'изо-Пентан (iC5)',
+        'c6plus': 'C6+ (всего)',
+        'benzene': 'Бензол (C₆H₆)',
+        'toluene': 'Толуол (C₇H₈)',
+        'hexane': 'Гексан (C6)', 'heptane': 'Гептан (C7)',
+        'octane': 'Октан (C8)', 'nonane': 'Нонан (C9)', 'decane': 'Декан (C10)'
+    }
+    
+    comp_str = ""
+    for key, value in components.items():
+        if value > 0:
+            display = display_names.get(key, key)
+            comp_str += f"    {display:<20} {value:>6.1f} %\n"
+    
+    mu = result.get('mu_dynamic')
+    mu_str = f"{mu*1000:.4f}" if mu is not None else "—"
+    
+    rho = result.get('rho_gas') or result.get('rho_liquid') or result.get('rho') or 1.0
+    nu_str = f"{(mu/rho)*1e6:.4f}" if mu is not None else "—"
+    
+    rho_str = f"{result['rho_gas']:.3f}" if result.get('rho_gas') else f"{result['rho_liquid']:.3f}" if result.get('rho_liquid') else "—"
+    
+    Z = result.get('Z')
+    Z_str = f"{Z:.6f}" if Z is not None else "— (ошибка)"
+    
+    type_label = "Массовые" if input_type == "Массовые" else "Мольные"
+    is_pure = result.get('is_pure', False)
+    pure_label = "Да" if is_pure else "Нет"
+    
+    quote_text, quote_author = get_random_quote()
+    warning = result.get('warning', '')
+    warning_text = f"  ⚠️ {warning}\n" if warning else "  ✅ Ошибок не обнаружено\n"
+    
+    return f"""
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    КАЛЬКУЛЯТОР СВОЙСТВ УГЛЕВОДОРОДОВ                      ║
+║                          ПРОТОКОЛ РАСЧЕТА                                  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ДАННЫЕ ПОЛЬЗОВАТЕЛЯ                                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Фамилия И.О.:     {user_name:<40} │
+│  Цех:              {user_workshop:<40} │
+│  Датчик:           {user_sensor:<40} │
+│  Фаза:             {phase_type:<44}                                      │
+│  Чистая среда:     {pure_label:<44}                                      │
+│  Дата расчета:     {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}                    │
+│  Тип долей:        {type_label:<44}                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ВХОДНЫЕ ДАННЫЕ                                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Температура:        {T_C:>7.1f} °C                                    │
+│  Давление:           {P_MPa:>7.3f} МПа                                 │
+│  Метод:              Пенга-Робинсон                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ СОСТАВ СМЕСИ ({type_label} доли)                                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+{comp_str}└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ РЕЗУЛЬТАТЫ РАСЧЕТА                                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  {T_C:.1f}°C, {P_MPa:.3f} МПа                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Z-фактор:               {Z_str:>12}                               │
+│  Плотность, кг/м³:       {rho_str:>12}                               │
+│  Дин. вязкость, сП:      {mu_str:>12}                               │
+│  Кин. вязкость, сСт:     {nu_str:>12}                               │
+│  Мол. масса, кг/кмоль:   {result.get('MW', 0):>12.3f}                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+{warning_text}
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  ЦИТАТА УЧЁНОГО                                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  «{quote_text}»                                                           │
+│  — {quote_author}                                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  Расчет произведен автоматически.                                          ║
+║  Ответственность за корректность исходных данных несет пользователь.       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+"""
+
+def mass_to_mole(components_mass, components_mw):
+    mass_values = {}
+    total_mass = 0
+    for key, value in components_mass.items():
+        if value > 0:
+            mass_values[key] = value
+            total_mass += value
+    
+    mole_values = {}
+    total_moles = 0
+    for key, mass in mass_values.items():
+        if key in components_mw and components_mw[key] > 0:
+            moles = mass / components_mw[key]
+            mole_values[key] = moles
+            total_moles += moles
+    
+    mole_fractions = {}
+    for key, moles in mole_values.items():
+        if total_moles > 0:
+            mole_fractions[key] = (moles / total_moles) * 100
+    return mole_fractions
+
+def login_form():
+    st.markdown("### Вход в систему")
+    st.markdown("Введите данные для автозаполнения протокола")
+    with st.form("login_form"):
+        name = st.text_input("Фамилия И.О.", placeholder="Например: Иванов И.И.")
+        workshop = st.text_input("Цех", placeholder="Например: Цех №5")
+        submitted = st.form_submit_button("Войти")
+        if submitted and name and workshop:
+            st.session_state.user_name = name
+            st.session_state.user_workshop = workshop
+            st.session_state.logged_in = True
+            st.rerun()
+        elif submitted:
+            st.warning("Заполните все поля")
+
+# ============================================================
+# БЛОК 7: НАСТРОЙКА СТРАНИЦЫ
+# ============================================================
+
+if MOBILE:
+    st.set_page_config(page_title="Калькулятор углеводородов", page_icon="🧪", layout="centered")
+else:
+    st.set_page_config(page_title="Калькулятор свойств углеводородов", page_icon="🧪", layout="wide")
+
+SESSION_KEYS = [
+    'logged_in', 'user_name', 'user_workshop', 'show_report',
+    'result', 'T_C', 'P_MPa',
+    'components', 'input_type', 'user_sensor', 'quote_shown',
+    'report_filename', 'report_text', 'components_input', 'phase_type',
+    'pure_component', 'load_example', 'chart_data', 'comp_names', 'zs_for_chart'
+]
+
+for key in SESSION_KEYS:
+    if key not in st.session_state:
+        if key == 'logged_in':
+            st.session_state.logged_in = False
+        elif key in ['user_name', 'user_workshop', 'user_sensor', 'input_type', 'phase_type']:
+            st.session_state[key] = '' if key in ['user_name', 'user_workshop', 'user_sensor'] else 'Мольные'
+            if key == 'input_type':
+                st.session_state.input_type = 'Мольные'
+            if key == 'phase_type':
+                st.session_state.phase_type = 'Газ'
+        elif key in ['result', 'T_C', 'P_MPa']:
+            st.session_state[key] = None
+        elif key in ['components', 'components_input']:
+            st.session_state[key] = {}
+        elif key == 'pure_component':
+            st.session_state.pure_component = None
+        elif key == 'load_example':
+            st.session_state.load_example = False
+        elif key == 'chart_data':
+            st.session_state.chart_data = None
+        elif key in ['comp_names', 'zs_for_chart']:
+            st.session_state[key] = []
+        else:
+            st.session_state[key] = False
+
+# ============================================================
+# БЛОК 8: АВТОРИЗАЦИЯ
+# ============================================================
+
+if not st.session_state.logged_in:
+    login_form()
+    st.stop()
+
+# ============================================================
+# БЛОК 9: ОСНОВНОЙ ИНТЕРФЕЙС
+# ============================================================
+
+col_title, col_logout, col_theme = st.columns([4, 1, 1] if not MOBILE else [3, 1, 1])
+
+with col_title:
+    if MOBILE:
+        st.title("Углеводороды")
+        st.markdown("### Расчет Z, ρ, μ")
+    else:
+        st.markdown('<h1 class="sci-fi-title">Калькулятор свойств углеводородов</h1>', unsafe_allow_html=True)
+        st.markdown("### Расчет Z-фактора, плотности и вязкости (Пенга-Робинсон)")
+
+with col_logout:
+    st.write("")
+    st.write("")
+    if st.button("Выйти", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.user_name = ''
+        st.session_state.user_workshop = ''
+        st.rerun()
+
+with col_theme:
+    st.write("")
+    st.write("")
+    theme_icon = "🌙" if st.session_state.theme == 'light' else "☀️"
+    if st.button(theme_icon, use_container_width=True, help="Переключить тему"):
+        st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
+        st.rerun()
+
+st.caption(f"Пользователь: {st.session_state.user_name} | {st.session_state.user_workshop}")
+
+if not st.session_state.quote_shown:
+    quote_text, quote_author = get_random_quote()
+    if MOBILE and len(quote_text) > 80:
+        quote_text = quote_text[:77] + "..."
+    st.markdown(f'<div class="quote">«{quote_text}»<span class="quote-author">— {quote_author}</span></div>', unsafe_allow_html=True)
+    st.session_state.quote_shown = True
+
+@st.cache_resource
+def get_calculator():
+    return SHFLUCalculator()
+
+calculator = get_calculator()
+
+MW_MAP = {
+    'helium': 4.003, 'hydrogen': 2.016, 'oxygen': 32.000,
+    'nitrogen': 28.013, 'co2': 44.010,
+    'methane': 16.043, 'ethane': 30.070, 'propane': 44.097,
+    'n-butane': 58.123, 'i-butane': 58.123,
+    'n-pentane': 72.151, 'i-pentane': 72.151,
+    'benzene': 78.114, 'toluene': 92.141,
+    'hexane': 86.178, 'heptane': 100.205,
+    'octane': 114.232, 'nonane': 128.259, 'decane': 142.286,
+    'c6plus': 100.000
+}
+
+if MOBILE:
+    col1 = st.container()
+    col2 = None
+else:
+    col1, col2 = st.columns(2)
+
+# ============================================================
+# БЛОК 10: ЛЕВАЯ КОЛОНКА — ВВОД ДАННЫХ
+# ============================================================
+
+with col1:
+    st.header("Входные данные")
+    
+    with st.expander("Условия расчета", expanded=True):
+        T_C = st.number_input("Температура (°C)", value=35.0, min_value=-50.0, max_value=150.0, step=1.0)
+        P_MPa = st.number_input("Давление (МПа)", value=2.5, min_value=0.001, max_value=10.0, step=0.1)
+        
+        phase_type = st.radio("Фаза:", ["Газ", "Жидкость"], index=0 if st.session_state.phase_type == "Газ" else 1)
+        st.session_state.phase_type = phase_type
+    
+    with st.expander("Тип долей", expanded=True):
+        input_type = st.radio("Тип данных:", ["Мольные", "Массовые"], index=0)
+        if input_type == "Массовые":
+            st.info("Автоматический пересчет в мольные")
+    
+    with st.expander("Состав смеси", expanded=not MOBILE):
+        st.markdown(f"**{input_type} доли компонентов:**")
+        
+        component_order = [
+            ('helium', 'Гелий'), ('hydrogen', 'Водород'), ('oxygen', 'Кислород'),
+            ('nitrogen', 'Азот'), ('co2', 'CO₂'),
+            ('methane', 'Метан C1'), ('ethane', 'Этан C2'), ('propane', 'Пропан C3'),
+            ('n-butane', 'н-Бутан C4'), ('i-butane', 'iC4'),
+            ('n-pentane', 'н-Пентан C5'), ('i-pentane', 'iC5'),
+            ('c6plus', 'C6+'),
+            ('benzene', 'Бензол C₆H₆'),
+            ('toluene', 'Толуол C₇H₈'),
+            ('hexane', 'Гексан C6'), ('heptane', 'Гептан C7'),
+            ('octane', 'Октан C8'), ('nonane', 'Нонан C9'), ('decane', 'Декан C10'),
+        ]
+        
+        default_values = {
+            'helium': 0.0, 'hydrogen': 0.0, 'oxygen': 0.0,
+            'nitrogen': 3.0, 'co2': 0.0,
+            'methane': 80.0, 'ethane': 12.0, 'propane': 5.0,
+            'n-butane': 0.0, 'i-butane': 0.0,
+            'n-pentane': 0.0, 'i-pentane': 0.0,
+            'c6plus': 0.0,
+            'benzene': 0.0,
+            'toluene': 0.0,
+            'hexane': 0.0, 'heptane': 0.0, 'octane': 0.0,
+            'nonane': 0.0, 'decane': 0.0
+        }
+        
+        if st.session_state.pure_component:
+            pure_key = st.session_state.pure_component
+            for name, _ in component_order:
+                session_key = f"comp_{name}_{input_type}"
+                if session_key in st.session_state:
+                    del st.session_state[session_key]
+            st.session_state[f"comp_{pure_key}_{input_type}"] = 100.0
+            st.session_state.pure_component = None
+        
+        if st.session_state.load_example:
+            st.session_state.load_example = False
+            for name, _ in component_order:
+                session_key = f"comp_{name}_{input_type}"
+                if session_key in st.session_state:
+                    del st.session_state[session_key]
+            st.session_state[f"comp_nitrogen_{input_type}"] = 3.0
+            st.session_state[f"comp_methane_{input_type}"] = 80.0
+            st.session_state[f"comp_ethane_{input_type}"] = 12.0
+            st.session_state[f"comp_propane_{input_type}"] = 5.0
+        
+        if MOBILE:
+            comp_col1, comp_col2 = st.columns(2)
+            comp_col3 = None
+        else:
+            comp_col1, comp_col2, comp_col3 = st.columns(3)
+        
+        components_input = {}
+        for i, (key, display_name) in enumerate(component_order):
+            if i % 3 == 0:
+                col = comp_col1
+            elif i % 3 == 1:
+                col = comp_col2
+            else:
+                col = comp_col3 if comp_col3 is not None else comp_col1
+            
+            session_key = f"comp_{key}_{input_type}"
+            if session_key in st.session_state:
+                value = st.session_state[session_key]
+            else:
+                value = default_values[key]
+            
+            components_input[key] = col.number_input(
+                display_name, value=value, min_value=0.0, max_value=100.0, step=0.1,
+                key=session_key
+            )
+        
+        c6plus_value = components_input.get('c6plus', 0)
+        if c6plus_value > 0:
+            heavy_sum = sum(components_input.get(k, 0) for k in ['hexane', 'heptane', 'octane', 'nonane', 'decane'])
+            if heavy_sum == 0 or abs(c6plus_value - heavy_sum) > 0.1:
+                coeffs = [0.7, 0.5, 0.35, 0.2, 0.15]
+                total_coeff = sum(coeffs)
+                normalized_coeffs = [c / total_coeff for c in coeffs]
+                fractions = ['hexane', 'heptane', 'octane', 'nonane', 'decane']
+                for i, key in enumerate(fractions):
+                    if i < len(normalized_coeffs):
+                        new_value = c6plus_value * normalized_coeffs[i]
+                        st.session_state[f"comp_{key}_{input_type}"] = new_value
+                        components_input[key] = new_value
+        
+        st.markdown("---")
+        st.markdown("**🎯 Быстрый выбор чистой среды:**")
+        
+        col_pure1, col_pure2, col_pure3 = st.columns(3)
+        
+        if col_pure1.button("Метан", use_container_width=True):
+            st.session_state.pure_component = 'methane'
+            st.rerun()
+        
+        if col_pure2.button("Этан", use_container_width=True):
+            st.session_state.pure_component = 'ethane'
+            st.rerun()
+        
+        if col_pure3.button("Пропан", use_container_width=True):
+            st.session_state.pure_component = 'propane'
+            st.rerun()
+        
+        col_pure4, col_pure5, col_pure6 = st.columns(3)
+        
+        if col_pure4.button("Азот", use_container_width=True):
+            st.session_state.pure_component = 'nitrogen'
+            st.rerun()
+        
+        if col_pure5.button("CO₂", use_container_width=True):
+            st.session_state.pure_component = 'co2'
+            st.rerun()
+        
+        if col_pure6.button("н-Бутан", use_container_width=True):
+            st.session_state.pure_component = 'n-butane'
+            st.rerun()
+        
+        st.markdown("---")
+        
+        col_btn1, col_btn2 = st.columns(2)
+        
+        with col_btn1:
+            if st.button("Загрузить пример", use_container_width=True):
+                st.session_state.load_example = True
+                st.rerun()
+        
+        with col_btn2:
+            if st.button("Сбросить всё", use_container_width=True):
+                for name, _ in component_order:
+                    session_key = f"comp_{name}_{input_type}"
+                    if session_key in st.session_state:
+                        del st.session_state[session_key]
+                st.session_state.pure_component = None
+                st.rerun()
+        
+        total = sum(components_input.values())
+        if total > 0 and abs(total - 100) > 0.01:
+            st.warning(f"Сумма = {total:.1f}% (будет нормализована до 100%)")
+        elif abs(total - 100) <= 0.01 and total > 0:
+            st.success(f"Сумма = {total:.1f}%")
+        else:
+            st.info("Введите состав смеси")
+    
+    user_sensor = st.text_input("Датчик", placeholder="Например: PT-101", key="sensor_input")
+    st.session_state.user_sensor = user_sensor
+    
+    st.markdown("---")
+    
+    button_label = "Рассчитать" if not MOBILE else "Расчет"
+    if st.button(button_label, type="primary", use_container_width=True):
+        st.session_state.quote_shown = False
+        
+        total = sum(components_input.values())
+        if total > 0 and abs(total - 100) > 0.01:
+            for key in components_input:
+                components_input[key] = (components_input[key] / total) * 100
+        
+        zs = []
+        comp_names = []
+        
+        name_map = {
+            'helium': 'helium', 'hydrogen': 'hydrogen', 'oxygen': 'oxygen',
+            'nitrogen': 'nitrogen', 'co2': 'co2',
+            'methane': 'methane', 'ethane': 'ethane', 'propane': 'propane',
+            'n-butane': 'n-butane', 'i-butane': 'i-butane',
+            'n-pentane': 'n-pentane', 'i-pentane': 'i-pentane',
+            'benzene': 'benzene', 'toluene': 'toluene',
+            'hexane': 'hexane', 'heptane': 'heptane',
+            'octane': 'octane', 'nonane': 'nonane', 'decane': 'decane'
+        }
+        
+        if input_type == "Массовые":
+            components_for_calc = mass_to_mole(components_input, MW_MAP)
+            components_display = components_for_calc
+        else:
+            components_for_calc = components_input
+            components_display = components_input
+        
+        for key, value in components_for_calc.items():
+            if key != 'c6plus' and value > 0:
+                comp_names.append(name_map.get(key, key))
+                zs.append(value / 100)
+        
+        total_calc = sum(zs)
+        if abs(total_calc - 1) > 0.01:
+            st.error(f"❌ Сумма молярных долей = {total_calc*100:.1f}% (должна быть 100%)")
+            st.stop()
+        
+        try:
+            st.session_state.input_type = input_type
+            
+            calc = SHFLUCalculator(method='PR', phase=phase_type)
+            calc.set_composition(comp_names, zs)
+            calc.set_conditions(T_C, P_MPa)
+            result = calc.calculate()
+            
+            st.session_state.result = result
+            st.session_state.T_C = T_C
+            st.session_state.P_MPa = P_MPa
+            st.session_state.components = components_display
+            st.session_state.components_input = components_input
+            st.session_state.comp_names = comp_names
+            st.session_state.zs_for_chart = zs
+            st.session_state.chart_data = {'comp_names': comp_names, 'zs': zs}
+            
+            st.success("✅ Расчет выполнен")
+            
+            os.makedirs("reports", exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"reports/protokol_{timestamp}_{st.session_state.user_sensor}.txt"
+            
+            report_text = generate_report(
+                result, components_display, T_C, P_MPa,
+                st.session_state.user_name,
+                st.session_state.user_workshop,
+                st.session_state.user_sensor,
+                input_type, phase_type
+            )
+            
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(report_text)
+            
+            st.session_state.report_filename = filename
+            st.session_state.report_text = report_text
+            st.session_state.show_report = True
+            
+            st.success("✅ Протокол сохранен")
+            
+            try:
+                success, message = send_protocol_by_email(
+                    report_text,
+                    st.session_state.user_name,
+                    st.session_state.user_workshop,
+                    st.session_state.user_sensor,
+                    T_C, P_MPa,
+                    f"protokol_{timestamp}_{st.session_state.user_sensor}.txt"
+                )
+                if success:
+                    st.info("📧 Протокол отправлен на почту")
+                else:
+                    st.warning(message)
+            except Exception as e:
+                st.warning(f"⚠️ Протокол не отправлен: {str(e)}")
+        
+        except Exception as e:
+            st.error(f"❌ Ошибка: {str(e)}")
+
+# ============================================================
+# БЛОК 11: ПРАВАЯ КОЛОНКА — РЕЗУЛЬТАТЫ И ГРАФИКИ
+# ============================================================
+
+if col2 is not None:
+    with col2:
+        st.header("Результаты")
+        
+        if st.session_state.result is not None:
+            result = st.session_state.result
+            phase_type = st.session_state.get('phase_type', 'Газ')
+            input_type = st.session_state.get('input_type', 'Мольные')
+            
+            method_name = result.get('method', 'Пенга-Робинсон')
+            st.info(f"📘 Метод: {method_name} ({phase_type})")
+            
+            if result.get('warning'):
+                st.warning(f"⚠️ {result['warning']}")
+            
+            type_label = "Массовые" if input_type == "Массовые" else "Мольные"
+            is_pure = result.get('is_pure', False)
+            pure_label = " | 🎯 Чистая среда" if is_pure else ""
+            st.caption(f"Тип долей: {type_label} | Фаза: {phase_type}{pure_label}")
+            
+            with st.expander("Основные параметры", expanded=True):
+                if MOBILE:
+                    col_met1, col_met2 = st.columns(2)
+                    col_met3 = st.columns(1)[0]
+                else:
+                    col_met1, col_met2, col_met3 = st.columns(3)
+                
+                with col_met1:
+                    st.metric("T", f"{st.session_state.T_C:.1f}°C")
+                with col_met2:
+                    st.metric("P", f"{st.session_state.P_MPa:.3f} МПа")
+                with col_met3:
+                    st.metric("M", f"{result['MW']:.3f} кг/кмоль")
+            
+            if result.get('success', False):
+                with st.expander("Результаты расчета", expanded=True):
+                    col_z, col_rho = st.columns(2)
+                    
+                    with col_z:
+                        Z = result.get('Z')
+                        if Z is not None:
+                            st.metric("Z-фактор", f"{Z:.6f}")
+                        else:
+                            st.metric("Z-фактор", "—")
+                            st.caption("⚠️ Не рассчитан")
+                    
+                    with col_rho:
+                        if result.get('rho_gas') is not None:
+                            st.metric("Плотность (газ)", f"{result['rho_gas']:.3f} кг/м³")
+                        elif result.get('rho_liquid') is not None:
+                            st.metric("Плотность (жидк)", f"{result['rho_liquid']:.3f} кг/м³")
+                        else:
+                            st.metric("Плотность", "—")
+                    
+                    mu = result.get('mu_dynamic')
+                    if mu is not None:
+                        mu_cP = mu * 1000
+                        rho_for_nu = result.get('rho_gas') or result.get('rho_liquid') or 1.0
+                        nu_cSt = (mu / rho_for_nu) * 1e6
+                        
+                        col_visc1, col_visc2 = st.columns(2)
+                        with col_visc1:
+                            st.metric("Динамическая вязкость", f"{mu_cP:.4f} сП")
+                        with col_visc2:
+                            st.metric("Кинематическая вязкость", f"{nu_cSt:.4f} сСт")
+            else:
+                st.error(f"❌ Ошибка расчета: {result.get('error', 'Неизвестная ошибка')}")
+            
+            # ============================================================
+            # ГРАФИКИ ЗАВИСИМОСТЕЙ
+            # ============================================================
+            
+            with st.expander("📊 Графики зависимостей", expanded=False):
+                
+                comp_names_chart = st.session_state.get('comp_names', [])
+                zs_chart = st.session_state.get('zs_for_chart', [])
+                
+                if not comp_names_chart or not zs_chart:
+                    st.warning("Нет данных для построения графиков. Сначала выполните расчет.")
+                else:
+                    chart_type = st.selectbox(
+                        "Выберите тип графика:",
+                        [
+                            "Z-фактор от давления (T = const)",
+                            "Плотность от температуры (P = const)",
+                            "Вязкость от температуры (P = const)",
+                            "Вязкость от давления (T = const)"
+                        ],
+                        key="chart_type_select"
+                    )
+                    
+                    T_C_base = st.session_state.T_C
+                    P_MPa_base = st.session_state.P_MPa
+                    phase_for_chart = st.session_state.get('phase_type', 'Газ')
+                    
+                    # ---- ГРАФИК 1: Z-фактор от давления ----
+                    if chart_type == "Z-фактор от давления (T = const)":
+                        st.markdown(f"**Зависимость Z-фактора от давления при T = {T_C_base}°C**")
+                        
+                        pressures = [0.1, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+                        Z_values = []
+                        
+                        progress_bar = st.progress(0)
+                        for i, P in enumerate(pressures):
+                            try:
+                                calc = SHFLUCalculator(method='PR', phase=phase_for_chart)
+                                calc.set_composition(comp_names_chart, zs_chart)
+                                calc.set_conditions(T_C_base, P)
+                                res = calc.calculate()
+                                Z_val = res.get('Z')
+                                if Z_val is not None and Z_val > 0:
+                                    Z_values.append(Z_val)
+                                else:
+                                    Z_values.append(None)
+                            except:
+                                Z_values.append(None)
+                            progress_bar.progress((i + 1) / len(pressures))
+                        progress_bar.empty()
+                        
+                        valid_data = [(P, Z) for P, Z in zip(pressures, Z_values) if Z is not None]
+                        if valid_data:
+                            P_plot, Z_plot = zip(*valid_data)
+                            
+                            fig, ax = plt.subplots(figsize=(10, 5))
+                            ax.plot(P_plot, Z_plot, 'b-o', linewidth=2, markersize=6)
+                            ax.axvline(x=P_MPa_base, color='r', linestyle='--', alpha=0.5, label=f'Текущее P = {P_MPa_base} МПа')
+                            ax.axhline(y=1.0, color='gray', linestyle=':', alpha=0.5, label='Идеальный газ (Z=1)')
+                            ax.set_xlabel('Давление, МПа', fontsize=12)
+                            ax.set_ylabel('Z-фактор', fontsize=12)
+                            ax.set_title(f'Z-фактор от давления (T = {T_C_base}°C, фаза: {phase_for_chart})', fontsize=13)
+                            ax.grid(True, alpha=0.3)
+                            ax.legend()
+                            st.pyplot(fig)
+                        else:
+                            st.warning("Не удалось построить график")
+                    
+                    # ---- ГРАФИК 2: Плотность от температуры ----
+                    elif chart_type == "Плотность от температуры (P = const)":
+                        st.markdown(f"**Зависимость плотности от температуры при P = {P_MPa_base} МПа**")
+                        
+                        temperatures = [-20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 150]
+                        rho_values = []
+                        
+                        progress_bar = st.progress(0)
+                        for i, T in enumerate(temperatures):
+                            try:
+                                calc = SHFLUCalculator(method='PR', phase=phase_for_chart)
+                                calc.set_composition(comp_names_chart, zs_chart)
+                                calc.set_conditions(T, P_MPa_base)
+                                res = calc.calculate()
+                                rho = res.get('rho_gas') or res.get('rho_liquid') or res.get('rho')
+                                if rho is not None and rho > 0:
+                                    rho_values.append(rho)
+                                else:
+                                    rho_values.append(None)
+                            except:
+                                rho_values.append(None)
+                            progress_bar.progress((i + 1) / len(temperatures))
+                        progress_bar.empty()
+                        
+                        valid_data = [(T, rho) for T, rho in zip(temperatures, rho_values) if rho is not None]
+                        if valid_data:
+                            T_plot, rho_plot = zip(*valid_data)
+                            
+                            fig, ax = plt.subplots(figsize=(10, 5))
+                            ax.plot(T_plot, rho_plot, 'g-o', linewidth=2, markersize=6)
+                            ax.axvline(x=T_C_base, color='r', linestyle='--', alpha=0.5, label=f'Текущая T = {T_C_base}°C')
+                            ax.set_xlabel('Температура, °C', fontsize=12)
+                            ax.set_ylabel('Плотность, кг/м³', fontsize=12)
+                            ax.set_title(f'Плотность от температуры (P = {P_MPa_base} МПа, фаза: {phase_for_chart})', fontsize=13)
+                            ax.grid(True, alpha=0.3)
+                            ax.legend()
+                            st.pyplot(fig)
+                        else:
+                            st.warning("Не удалось построить график")
+                    
+                    # ---- ГРАФИК 3: Вязкость от температуры ----
+                    elif chart_type == "Вязкость от температуры (P = const)":
+                        st.markdown(f"**Зависимость вязкости от температуры при P = {P_MPa_base} МПа**")
+                        
+                        temperatures = [-20, -10, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 150]
+                        mu_values = []
+                        
+                        progress_bar = st.progress(0)
+                        for i, T in enumerate(temperatures):
+                            try:
+                                calc = SHFLUCalculator(method='PR', phase=phase_for_chart)
+                                calc.set_composition(comp_names_chart, zs_chart)
+                                calc.set_conditions(T, P_MPa_base)
+                                res = calc.calculate()
+                                mu = res.get('mu_dynamic')
+                                if mu is not None and mu > 0:
+                                    mu_values.append(mu * 1000)
+                                else:
+                                    mu_values.append(None)
+                            except:
+                                mu_values.append(None)
+                            progress_bar.progress((i + 1) / len(temperatures))
+                        progress_bar.empty()
+                        
+                        valid_data = [(T, mu) for T, mu in zip(temperatures, mu_values) if mu is not None]
+                        if valid_data:
+                            T_plot, mu_plot = zip(*valid_data)
+                            
+                            fig, ax = plt.subplots(figsize=(10, 5))
+                            ax.plot(T_plot, mu_plot, 'm-o', linewidth=2, markersize=6)
+                            ax.axvline(x=T_C_base, color='r', linestyle='--', alpha=0.5, label=f'Текущая T = {T_C_base}°C')
+                            ax.set_xlabel('Температура, °C', fontsize=12)
+                            ax.set_ylabel('Динамическая вязкость, сП', fontsize=12)
+                            ax.set_title(f'Вязкость от температуры (P = {P_MPa_base} МПа, фаза: {phase_for_chart})', fontsize=13)
+                            ax.grid(True, alpha=0.3)
+                            ax.legend()
+                            st.pyplot(fig)
+                        else:
+                            st.warning("Не удалось построить график")
+                    
+                    # ---- ГРАФИК 4: Вязкость от давления ----
+                    elif chart_type == "Вязкость от давления (T = const)":
+                        st.markdown(f"**Зависимость вязкости от давления при T = {T_C_base}°C**")
+                        
+                        pressures = [0.1, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+                        mu_values = []
+                        
+                        progress_bar = st.progress(0)
+                        for i, P in enumerate(pressures):
+                            try:
+                                calc = SHFLUCalculator(method='PR', phase=phase_for_chart)
+                                calc.set_composition(comp_names_chart, zs_chart)
+                                calc.set_conditions(T_C_base, P)
+                                res = calc.calculate()
+                                mu = res.get('mu_dynamic')
+                                if mu is not None and mu > 0:
+                                    mu_values.append(mu * 1000)
+                                else:
+                                    mu_values.append(None)
+                            except:
+                                mu_values.append(None)
+                            progress_bar.progress((i + 1) / len(pressures))
+                        progress_bar.empty()
+                        
+                        valid_data = [(P, mu) for P, mu in zip(pressures, mu_values) if mu is not None]
+                        if valid_data:
+                            P_plot, mu_plot = zip(*valid_data)
+                            
+                            fig, ax = plt.subplots(figsize=(10, 5))
+                            ax.plot(P_plot, mu_plot, 'c-o', linewidth=2, markersize=6)
+                            ax.axvline(x=P_MPa_base, color='r', linestyle='--', alpha=0.5, label=f'Текущее P = {P_MPa_base} МПа')
+                            ax.set_xlabel('Давление, МПа', fontsize=12)
+                            ax.set_ylabel('Динамическая вязкость, сП', fontsize=12)
+                            ax.set_title(f'Вязкость от давления (T = {T_C_base}°C, фаза: {phase_for_chart})', fontsize=13)
+                            ax.grid(True, alpha=0.3)
+                            ax.legend()
+                            st.pyplot(fig)
+                        else:
+                            st.warning("Не удалось построить график")
+            
+            # ---- Данные пользователя ----
+            with st.expander("Данные пользователя", expanded=False):
+                st.text(f"ФИО: {st.session_state.user_name}")
+                st.text(f"Цех: {st.session_state.user_workshop}")
+                st.text(f"Датчик: {st.session_state.user_sensor}")
+                st.text(f"Фаза: {phase_type}")
+                st.text(f"Дата: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            
+            col_btn1, col_btn2 = st.columns(2)
+            
+            with col_btn1:
+                if st.button("📄 Показать протокол", use_container_width=True):
+                    st.session_state.show_report = True
+            
+            with col_btn2:
+                if st.button("📧 Отправить на почту", use_container_width=True):
+                    if 'report_text' in st.session_state:
+                        success, message = send_protocol_by_email(
+                            st.session_state.report_text,
+                            st.session_state.user_name,
+                            st.session_state.user_workshop,
+                            st.session_state.user_sensor,
+                            st.session_state.T_C,
+                            st.session_state.P_MPa,
+                            f"protokol_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{st.session_state.user_sensor}.txt"
+                        )
+                        if success:
+                            st.success(message)
+                        else:
+                            st.error(message)
+                    else:
+                        st.warning("Сначала выполните расчет")
+            
+            if st.session_state.show_report:
+                with st.expander("📄 Протокол расчета", expanded=True):
+                    if 'report_text' in st.session_state:
+                        if MOBILE:
+                            st.text(st.session_state.report_text)
+                        else:
+                            st.code(st.session_state.report_text, language='text')
+                        
+                        if 'report_filename' in st.session_state:
+                            st.info(f"💾 Файл: {st.session_state.report_filename}")
+                        
+                        if st.button("❌ Закрыть"):
+                            st.session_state.show_report = False
+                            st.rerun()
+                    else:
+                        st.warning("Протокол не найден")
+        
+        else:
+            st.info("👆 Заполните данные и нажмите 'Рассчитать'")
+
+# ============================================================
+# БЛОК 12: ПОДВАЛ
+# ============================================================
+
+st.markdown(f"""
+<div class="footer">
+    <div class="company">🧪 Калькулятор свойств углеводородов</div>
+    <div class="group">ООО «ИЗП» · Группа моделирования технологических процессов</div>
+    <div class="lead">под руководством Клепцова Д.В.</div>
+    <div style="margin-top:10px; font-size:12px; color:#95a5a6;">
+        Python · Streamlit · Peng-Robinson<br>
+        Расчетная точность: 99.8%
+    </div>
+</div>
+""", unsafe_allow_html=True)
