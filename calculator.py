@@ -3,6 +3,7 @@ calculator.py - Ядро расчетов свойств углеводород�
 Метод: Пенга-Робинсон
 Поддерживаемые компоненты: He, H2, O2, N2, CO2, C1-C10, бензол, толуол
 Поддержка чистых сред (100% одного компонента)
+Расчет влагосодержания (ppmV) и предупреждение о газогидратах
 """
 
 from thermo import ChemicalConstantsPackage, PRMIX, CEOSGas, CEOSLiquid, FlashVL
@@ -21,7 +22,7 @@ class SHFLUCalculator:
         self.T = None
         self.P = None
         self.result = None
-        self.is_pure = False  # Флаг чистой среды
+        self.is_pure = False
         
         self.MW_map = {
             'methane': 16.043, 'ethane': 30.070, 'propane': 44.097,
@@ -48,7 +49,6 @@ class SHFLUCalculator:
     def set_composition(self, components, zs):
         self.components = components
         self.zs = zs
-        # Проверяем, является ли среда чистой
         self.is_pure = (len(components) == 1)
     
     def set_conditions(self, T_C, P_MPa):
@@ -160,10 +160,6 @@ class SHFLUCalculator:
         except:
             return self.calculate_viscosity_approx()
     
-    # ============================================================
-    # ВЯЗКОСТЬ: УНИВЕРСАЛЬНЫЙ ЗАПАСНОЙ
-    # ============================================================
-    
     def calculate_viscosity_approx(self):
         MW = self.get_molar_mass()
         mu_cP = 0.0005 * (MW ** 0.5) * (self.T ** 0.5) / 100
@@ -188,14 +184,87 @@ class SHFLUCalculator:
             return self.calculate_density_ideal_gas()
     
     # ============================================================
-    # РАСЧЕТ ПО ПЕНГА-РОБИНСОНУ (С ПОДДЕРЖКОЙ ЧИСТЫХ СРЕД)
+    # ВЛАГОСОДЕРЖАНИЕ (ppmV) + ГИДРАТЫ
+    # ============================================================
+    
+    def calculate_water_content(self):
+        """
+        Расчет влагосодержания в объемных ppm.
+        Учитывает CO2 по упрощенному методу Маддокса.
+        Возвращает: (water_ppm, warning)
+        """
+        T_C = self.T - 273.15
+        P_MPa = self.P / 1e6
+        
+        # Мольная доля CO2
+        y_co2 = 0.0
+        for name, frac in zip(self.components, self.zs):
+            if name == 'co2':
+                y_co2 = frac
+                break
+        
+        # Давление насыщения воды (или льда)
+        if T_C >= 0:
+            A, B, C = 8.07131, 1730.63, 233.426
+            P_sat_mmHg = 10 ** (A - B / (C + T_C))
+        else:
+            A, B, C = 9.5041, 2663.5, 272.5
+            P_sat_mmHg = 10 ** (A - B / (C + T_C))
+        P_sat_MPa = P_sat_mmHg * 0.000133322
+        
+        # Влагосодержание сладкой части (Букачек) в lbm/MMscf
+        log_B = -1713.66 / (273.15 + T_C) + 6.69449
+        W_HC_lbm = 47484 * P_sat_MPa / P_MPa + (10 ** log_B)
+        
+        # Учет CO2 (упрощенный Маддокс: W_CO2 ~ 0.75 * W_HC)
+        W_CO2_eff = 0.75 * W_HC_lbm
+        W_total_lbm = (1 - y_co2) * W_HC_lbm + y_co2 * W_CO2_eff
+        
+        # Перевод lbm/MMscf → ppm (объемные)
+        W_ppm = W_total_lbm * 1.96
+        
+        # Предупреждение о гидратах (только для газа)
+        warning = None
+        if self.phase == 'Газ':
+            HFT = self.estimate_hydrate_formation_temperature()
+            if HFT is not None and T_C < HFT + 2:
+                warning = (f"⚠️ Возможно образование газогидратов. "
+                           f"Температура гидратообразования ≈ {HFT:.1f} °C, "
+                           f"фактическая T = {T_C:.1f} °C при P = {P_MPa:.1f} МПа.")
+        
+        return W_ppm, warning
+    
+    def estimate_hydrate_formation_temperature(self):
+        """Оценка температуры гидратообразования (HFT) по упрощенной корреляции"""
+        P_MPa = self.P / 1e6
+        if P_MPa < 0.5:
+            return None
+        
+        y_co2 = 0.0
+        y_hydrate_formers = 0.0
+        for name, frac in zip(self.components, self.zs):
+            if name == 'co2':
+                y_co2 = frac
+            if name in ['methane', 'ethane', 'propane', 'n-butane', 'i-butane', 'co2']:
+                y_hydrate_formers += frac
+        
+        if y_hydrate_formers < 0.01:
+            return None
+        
+        HFT_CH4 = 8.9 * math.log(P_MPa) - 12.5
+        HFT = HFT_CH4 - 0.5 * (y_co2 * 100)
+        HFT = max(-20, min(HFT, 25))
+        
+        return HFT
+    
+    # ============================================================
+    # ОСНОВНОЙ РАСЧЕТ ПО ПЕНГА-РОБИНСОНУ
     # ============================================================
     
     def calculate_PR(self):
         try:
             constants, properties = ChemicalConstantsPackage.from_IDs(self.components)
             
-            # Для чистой среды kijs не нужны
             if self.is_pure:
                 kijs = None
             else:
@@ -219,7 +288,6 @@ class SHFLUCalculator:
             Z = result.Z()
             VF = getattr(result, 'VF', None)
             
-            # --- ПЛОТНОСТЬ ---
             rho_gas = None
             rho_liquid = None
             
@@ -243,7 +311,6 @@ class SHFLUCalculator:
             if rho_liquid is not None and (rho_liquid < 0.01 or rho_liquid > 2000):
                 rho_liquid = self.calculate_density_ideal_gas()
             
-            # --- ВЯЗКОСТЬ ---
             mu_dynamic = None
             
             if self.phase == 'Жидкость':
@@ -266,7 +333,6 @@ class SHFLUCalculator:
             if mu_dynamic is None or mu_dynamic <= 0:
                 mu_dynamic = self.calculate_viscosity_approx()
             
-            # Формируем название метода
             if self.is_pure:
                 method_name = f'Пенга-Робинсон (чистый {self.components[0]})'
             else:
@@ -284,6 +350,11 @@ class SHFLUCalculator:
                 'is_pure': self.is_pure,
                 'success': True
             }
+            
+            water_ppm, water_warning = self.calculate_water_content()
+            self.result['water_ppm'] = water_ppm
+            self.result['water_warning'] = water_warning
+            
             return self.result
             
         except Exception as e:
@@ -302,7 +373,9 @@ class SHFLUCalculator:
                 'phase': self.phase,
                 'is_pure': self.is_pure,
                 'success': False,
-                'error': str(e)
+                'error': str(e),
+                'water_ppm': None,
+                'water_warning': None
             }
             return self.result
     
@@ -360,6 +433,11 @@ class SHFLUCalculator:
             print(f"  Дин. вязкость:   {mu_cP:.4f} сП")
             print(f"  Кин. вязкость:   {nu_cSt:.4f} сСт")
         
+        if self.result.get('water_ppm') is not None:
+            print(f"  Влагосодержание: {self.result['water_ppm']:.1f} ppmV")
+        if self.result.get('water_warning'):
+            print(f"  ⚠️ {self.result['water_warning']}")
+        
         if self.result.get('MW'):
             print(f"  Молярная масса:   {self.result['MW']:.3f} кг/кмоль")
         print("=" * 60)
@@ -367,32 +445,32 @@ class SHFLUCalculator:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("ТЕСТ: ПЕНГА-РОБИНСОН (смеси + чистые среды)")
+    print("ТЕСТ: ПЕНГА-РОБИНСОН + ВЛАГОСОДЕРЖАНИЕ")
     print("=" * 60)
     
-    # Тест 1: Смесь
-    print("\n🔬 Тест 1: Смесь метан/этан/пропан")
+    print("\n🔬 Тест 1: Смесь с CO2 (газ)")
     calc1 = SHFLUCalculator(method='PR', phase='Газ')
     calc1.set_composition(
-        components=['methane', 'ethane', 'propane'],
-        zs=[0.80, 0.15, 0.05]
+        components=['methane', 'ethane', 'propane', 'co2'],
+        zs=[0.80, 0.10, 0.05, 0.05]
     )
-    calc1.set_conditions(T_C=35, P_MPa=2.5)
+    calc1.set_conditions(T_C=35, P_MPa=5.0)
     calc1.calculate()
     calc1.print_result()
     
-    # Тест 2: Чистый метан
-    print("\n🔬 Тест 2: Чистый метан")
+    print("\n🔬 Тест 2: Чистый метан (газ)")
     calc2 = SHFLUCalculator(method='PR', phase='Газ')
     calc2.set_composition(components=['methane'], zs=[1.0])
-    calc2.set_conditions(T_C=35, P_MPa=2.5)
+    calc2.set_conditions(T_C=20, P_MPa=8.0)
     calc2.calculate()
     calc2.print_result()
     
-    # Тест 3: Чистый пропан (жидкость)
-    print("\n🔬 Тест 3: Чистый пропан (жидкость)")
-    calc3 = SHFLUCalculator(method='PR', phase='Жидкость')
-    calc3.set_composition(components=['propane'], zs=[1.0])
-    calc3.set_conditions(T_C=25, P_MPa=1.0)
+    print("\n🔬 Тест 3: Газ при -10°C, 8 МПа (риск гидратов)")
+    calc3 = SHFLUCalculator(method='PR', phase='Газ')
+    calc3.set_composition(
+        components=['methane', 'ethane', 'co2'],
+        zs=[0.90, 0.05, 0.05]
+    )
+    calc3.set_conditions(T_C=-10, P_MPa=8.0)
     calc3.calculate()
     calc3.print_result()
